@@ -244,7 +244,7 @@ jobs:
   merge:
     name: 合并全部安装包
     needs: build
-    if: ${{ inputs.merge_artifact != false }}
+    if: ${{ inputs.merge_artifact != false || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v5
@@ -271,7 +271,7 @@ jobs:
   release:
     name: 发布到 Release
     needs: build
-    if: ${{ inputs.publish_release != false }}
+    if: ${{ inputs.publish_release != false || github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
