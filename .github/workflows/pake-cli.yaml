@@ -58,7 +58,6 @@ concurrency:
 env:
   PNPM_VERSION: "10.26.2"
   APP_VERSION: ${{ github.event.inputs.app_version || '1.1.6' }}
-  WINDOW_MODE: ${{ github.event.inputs.window_mode || 'fullscreen' }}
 
 # 只读取仓库内容；产物通过 artifact 上传。
 permissions:
@@ -154,7 +153,7 @@ jobs:
           INPUT_NAME: ${{ matrix.name }}
           INPUT_SAFE_DOMAIN: ${{ matrix.domain }}
           INPUT_APP_VERSION: ${{ env.APP_VERSION }}
-          INPUT_WINDOW_MODE: ${{ env.WINDOW_MODE }}
+          INPUT_WINDOW_MODE: ${{ inputs.window_mode }}
           INPUT_ARCH: ${{ matrix.arch }}
         run: |
           $args = $env:INPUT_URL, "--name", $env:INPUT_NAME, "--targets", $env:INPUT_ARCH
@@ -198,7 +197,7 @@ jobs:
           INPUT_NAME: ${{ matrix.name }}
           INPUT_SAFE_DOMAIN: ${{ matrix.domain }}
           INPUT_APP_VERSION: ${{ env.APP_VERSION }}
-          INPUT_WINDOW_MODE: ${{ env.WINDOW_MODE }}
+          INPUT_WINDOW_MODE: ${{ inputs.window_mode }}
           INPUT_ARCH: ${{ matrix.arch }}
         run: |
           ARGS=("$INPUT_URL" "--name" "$INPUT_NAME" "--targets" "$INPUT_ARCH")
@@ -297,7 +296,7 @@ jobs:
           tag_name: v${{ env.APP_VERSION }}
           name: 百分兔 v${{ env.APP_VERSION }}
           body: |
-            自动构建产物（窗口模式：${{ env.WINDOW_MODE }}）
+            自动构建产物（窗口模式：${{ inputs.window_mode }}）
 
             - 正式：Windows x64 / arm64、macOS arm64 / x64
             - 测试：Windows x64 / arm64、macOS arm64 / x64
