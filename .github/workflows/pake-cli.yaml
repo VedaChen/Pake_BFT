@@ -57,7 +57,7 @@ concurrency:
 
 env:
   PNPM_VERSION: "10.26.2"
-  APP_VERSION: ${{ github.event.inputs.app_version || '1.1.6' }}
+  APP_VERSION: ${{ github.event.inputs.app_version || format('1.1.{0}', github.run_number) }}
 
 # 只读取仓库内容；产物通过 artifact 上传。
 permissions:
