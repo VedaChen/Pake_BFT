@@ -91,6 +91,19 @@ function Save-SessionVersion {
     Set-Content -LiteralPath $script:VersionFile -Value $version.Next -Encoding ASCII
 }
 
+function Remove-OldArtifacts {
+    param([string]$ProductName, [string]$KeepPath)
+
+    $extension = [System.IO.Path]::GetExtension($KeepPath)
+    $pattern = '{0}-*-v*{1}' -f $ProductName, $extension
+    Get-ChildItem -Path $script:OutputDir -Filter $pattern -File -ErrorAction SilentlyContinue |
+        Where-Object { $_.FullName -ne $KeepPath } |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
+            Write-Host ('    已删除旧包：{0}' -f $_.Name) -ForegroundColor DarkGray
+        }
+}
+
 function Write-Title {
     Write-Host ''
     Write-Host '==================================================' -ForegroundColor DarkCyan
@@ -331,6 +344,8 @@ function Invoke-Build {
         $finalPath = Join-Path $outputDir ('{0}-{1}-v{2}.msi' -f $Environment.Name, $oneArch, $appVersion)
         Move-Item -LiteralPath $rootMsi -Destination $finalPath -Force
         $sizeMb = [math]::Round((Get-Item -LiteralPath $finalPath).Length / 1MB, 2)
+        Remove-OldArtifacts -ProductName $Environment.Name -KeepPath $finalPath
+
         $built += New-Object psobject -Property ([ordered]@{
             '架构'     = $oneArch
             '大小(MB)' = $sizeMb

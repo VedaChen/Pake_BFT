@@ -193,6 +193,8 @@ cd <仓库目录>
 
 产物直接放 `output\`，文件名带版本：`output\百分兔-x64-v1.1.2.msi`、`output\百分兔测试-arm64-v1.1.2.msi`。
 
+**每次出新包会自动删掉同产品、同格式的旧版本文件**（例如打出 `百分兔-x64-v1.1.4.msi` 就删掉 `百分兔-x64-v1.1.3.msi`），不用手动清理。
+
 `output\` 已在 `.gitignore` 中忽略，不会进版本库。
 
 脚本是 UTF-8 BOM + CRLF，Windows PowerShell 5.1 下中文不乱码。
