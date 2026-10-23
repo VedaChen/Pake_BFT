@@ -191,7 +191,7 @@ cd <仓库目录>
 
 脚本自动完成：首次 `pnpm install` → `pnpm run cli:build` → 按架构调 `node dist/cli.js` → arm64 自动加 Rust target → 兜底取回 msi → 汇总到 `output\`。
 
-产物直接放 `output\`，文件名带版本：`output\百分兔-x64-v1.1.2.msi`、`output\百分兔测试-arm64-v1.1.2.msi`。
+产物按环境分目录，文件名带版本：`output\正式\百分兔-x64-v1.1.2.msi`、`output\测试\百分兔测试-arm64-v1.1.2.msi`。
 
 **每次出新包会自动删掉同产品、同格式的旧版本文件**（例如打出 `百分兔-x64-v1.1.4.msi` 就删掉 `百分兔-x64-v1.1.3.msi`），不用手动清理。
 

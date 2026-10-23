@@ -30,6 +30,7 @@ $environments = [ordered]@{
         Name       = '百分兔'
         SafeDomain = 'sc.baifentu.net'
         Bundle     = $true
+        PackageDir = '正式'
     }
     '2' = @{
         Key        = 'test'
@@ -38,6 +39,7 @@ $environments = [ordered]@{
         Name       = '百分兔测试'
         SafeDomain = 'tiku.baifentu.net'
         Bundle     = $false
+        PackageDir = '测试'
     }
 }
 
@@ -92,11 +94,11 @@ function Save-SessionVersion {
 }
 
 function Remove-OldArtifacts {
-    param([string]$ProductName, [string]$KeepPath)
+    param([string]$Directory, [string]$ProductName, [string]$KeepPath)
 
     $extension = [System.IO.Path]::GetExtension($KeepPath)
     $pattern = '{0}-*-v*{1}' -f $ProductName, $extension
-    Get-ChildItem -Path $script:OutputDir -Filter $pattern -File -ErrorAction SilentlyContinue |
+    Get-ChildItem -Path $Directory -Filter $pattern -File -ErrorAction SilentlyContinue |
         Where-Object { $_.FullName -ne $KeepPath } |
         ForEach-Object {
             Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
@@ -297,7 +299,7 @@ function Invoke-Build {
         return
     }
 
-    $outputDir = $script:OutputDir
+    $outputDir = Join-Path $script:OutputDir $Environment.PackageDir
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
     $built = @()
@@ -352,7 +354,7 @@ function Invoke-Build {
         $finalPath = Join-Path $outputDir ('{0}-{1}-v{2}.msi' -f $Environment.Name, $oneArch, $appVersion)
         Move-Item -LiteralPath $rootMsi -Destination $finalPath -Force
         $sizeMb = [math]::Round((Get-Item -LiteralPath $finalPath).Length / 1MB, 2)
-        Remove-OldArtifacts -ProductName $Environment.Name -KeepPath $finalPath
+        Remove-OldArtifacts -Directory $outputDir -ProductName $Environment.Name -KeepPath $finalPath
 
         $built += New-Object psobject -Property ([ordered]@{
             '架构'     = $oneArch
