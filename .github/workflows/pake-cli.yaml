@@ -452,6 +452,7 @@ jobs:
           if [ "$INPUT_HIDE_TITLE_BAR" == "true" ]; then ARGS+=("--hide-title-bar"); fi
           if [ "$INPUT_NEW_WINDOW" == "true" ]; then ARGS+=("--new-window"); fi
           if [ "$INPUT_WINDOW_MODE" == "frameless" ]; then ARGS+=("--hide-window-decorations"); fi
+          if [ "$INPUT_WINDOW_MODE" == "fullscreen" ]; then ARGS+=("--fullscreen"); fi
 
           # The page's 退出应用 button closes the window; macOS defaults to hiding
           # the app instead of quitting, so disable that.
