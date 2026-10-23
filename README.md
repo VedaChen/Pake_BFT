@@ -1,3 +1,136 @@
+> **本仓库是「百分兔」桌面端的打包仓库**（基于 [tw93/Pake](https://github.com/tw93/Pake) fork，用 Pake CLI + Tauri 生成 Windows / macOS 安装包）。
+> 完整技术细节、参数含义、踩过的坑见 **[BFT_BUILD.md](./BFT_BUILD.md)**。下面是接手同学的快速上手。
+
+---
+
+# 百分兔 桌面端：Fork、打包、下载
+
+## 一、Fork 到自己的账号
+
+1. 打开本仓库页面，右上角 **Fork** → 选择自己的账号 → **Create fork**（保持 `main` 分支即可）
+2. 直接用自己的 fork 就能跑打包，**不需要额外配置任何 Secret**（打出来的包不签名、不公证）
+3. 如需换图标，替换这两个文件（打包时 CI 通过 raw URL 下载，所以必须提交到仓库）：
+   - Windows：`assets/bft-icon.ico`（多尺寸 ico）
+   - macOS：`assets/bft-icon.png`（≥256×256，PNG；**macOS 不能用 ico**，Pake 转换会失败并回退成默认图标）
+4. 若你的 fork 私有，注意 Actions 在私有仓库有额度限制，且部分 runner（如 `macos-latest`）可能不可用，建议保持公开
+
+## 二、触发打包（GitHub Actions）
+
+### 2.1 前置检查（一次性）
+
+打开 **Settings → Actions → General**：
+
+- **Actions permissions**：允许使用 Actions
+- **Workflow permissions**：选 **Read and write permissions**（workflow 需要读取仓库内容；本仓库已设为 write）
+
+### 2.2 网页操作
+
+1. 进入 **Actions** 标签页
+2. 左侧选 **Build App With Pake CLI**
+3. 点右侧 **Run workflow** → 选 `main` → 填参数 → **Run workflow**
+4. 等运行结束（Windows 约 7–10 分钟，macOS 约 8–12 分钟；带 WebView2 的正式包会再久一点）
+
+### 2.3 参数说明
+
+| 参数 | 必填 | 说明 / 建议值 |
+| --- | --- | --- |
+| `platform` | ✅ | `windows-latest`（Win）/ `macos-latest`（mac） |
+| `url` | ✅ | 生产 `https://sc.baifentu.net/web_app/#/`；测试 `https://tiku.baifentu.net/web_app/#/` |
+| `name` | ✅ | 产品名，也是安装目录/快捷方式名：生产 `百分兔`，测试 `百分兔测试` |
+| `icon` |  | 图标 raw URL，例 `https://raw.githubusercontent.com/<你的账号>/Pake_BFT/main/assets/bft-icon.ico` |
+| `safe_domain` |  | 域锁定：生产 `sc.baifentu.net`，测试 `tiku.baifentu.net` |
+| `installer_language` |  | **必须 `zh-CN`**，否则中文产品名在 WiX 打包阶段失败 |
+| `window_mode` |  | `fullscreen`（全屏、无最小化/最大化/关闭，用网页「退出应用」退出）/ `window`（普通窗口）/ `frameless`（无标题栏） |
+| `bundle_webview` |  | 正式包填 `true`：Windows 内嵌离线 WebView2（约 140MB），macOS 塞占位资源撑体积；测试包填 `false`（小包） |
+| `app_version` |  | **每次发版必须递增**（如 1.1.2 → 1.1.3），否则 Windows 安装包不会替换已安装的 exe |
+| `width` / `height` |  | `1200` / `780` |
+| `fullscreen` / `maximize` |  | 保持 `false`（窗口模式由 `window_mode` 控制） |
+
+### 2.4 推荐配置（两套环境）
+
+| | 生产 | 测试 |
+| --- | --- | --- |
+| url | `https://sc.baifentu.net/web_app/#/` | `https://tiku.baifentu.net/web_app/#/` |
+| name | `百分兔` | `百分兔测试` |
+| safe_domain | `sc.baifentu.net` | `tiku.baifentu.net` |
+| window_mode | `fullscreen` | `fullscreen` |
+| bundle_webview | `true`（大包） | `false`（小包） |
+
+### 2.5 命令行触发（可选）
+
+```bash
+export GH_TOKEN=<你的 token，需 repo + workflow 权限>
+
+gh workflow run "Build App With Pake CLI" --repo <你的账号>/Pake_BFT \
+  -f platform="windows-latest" \
+  -f url="https://sc.baifentu.net/web_app/#/" \
+  -f name="百分兔" \
+  -f icon="https://raw.githubusercontent.com/<你的账号>/Pake_BFT/main/assets/bft-icon.ico" \
+  -f safe_domain="sc.baifentu.net" \
+  -f installer_language="zh-CN" \
+  -f window_mode="fullscreen" \
+  -f bundle_webview=true \
+  -f app_version="1.1.3" \
+  -f width="1200" -f height="780" \
+  -f fullscreen=false -f maximize=false
+```
+
+## 三、下载产物
+
+### 3.1 网页下载
+
+**Actions → 点进某次运行 → 页面最下方 Artifacts 区域 → 点产物名**，会下载一个 zip。
+
+产物名形如：`百分兔-Windows-x64`、`百分兔-Windows-arm64`、`百分兔-macOS-arm64`、`百分兔-macOS-x64`。
+解压后文件名为 `<产品名>-<架构>-v<版本>.msi`（Windows）或 `.dmg`（macOS）。
+
+### 3.2 命令行下载
+
+```bash
+gh run list  --repo <你的账号>/Pake_BFT --workflow "Build App With Pake CLI" --limit 5
+gh run watch <run-id> --repo <你的账号>/Pake_BFT
+gh run download <run-id> --repo <你的账号>/Pake_BFT -D ./output
+```
+
+### 3.3 直链格式
+
+某次运行里每个产物的下载地址：
+
+```
+https://github.com/<你的账号>/Pake_BFT/actions/runs/<run-id>/artifacts/<artifact-id>
+```
+
+`run-id` 在运行页面 URL 里；`artifact-id` 可用 `gh api repos/<账号>/Pake_BFT/actions/runs/<run-id>/artifacts` 查到。
+
+## 四、本地打包（仅 Windows）
+
+```powershell
+# 一次性依赖：Node.js 20.9+ / pnpm 10 / Rust(rustup) / VS Build Tools(使用 C++ 的桌面开发)
+cd <仓库目录>
+.\scripts\build.ps1
+```
+
+菜单选择：环境（生产/测试）→ 架构（x64 / arm64 / 两个都要）→ 窗口模式（普通 / 全屏 / 无边框）→ 确认。
+
+- 版本号自动 +1（记录在 `output\version.txt`）
+- 产物输出到 `output\正式\` 或 `output\测试\`，文件名带版本
+- 打包成功后自动删除同产品、同格式的旧版本包
+
+## 五、必须知道的几个坑
+
+| 坑 | 说明 |
+| --- | --- |
+| 中文名打包失败 | 必须传 `installer_language=zh-CN`（默认 `en-US` 代码页打不了中文，`light.exe` 报错） |
+| 装了新包没变化 | 同版本 msi 不会替换已安装的 exe，**每次必须递增 `app_version`**；或先卸载再装 |
+| macOS 图标不生效 | macOS 只认 png/icns，传 `.ico` 会静默回退默认图标；仓库已放 `assets/bft-icon.png` |
+| arm64 msi 构建报 ENOENT | Pake 按 `aarch64` 找文件、Tauri 实际写 `arm64`；workflow 已有兜底从 bundle 目录取回 |
+| macOS 打不开提示「已损坏」 | 未签名/未公证，右键 →「打开」，或 `系统设置 → 隐私与安全性 → 仍要打开` |
+| 想关掉网页右键菜单 | `scripts/inject/disable-context-menu.js` 已注入；网页「退出应用」由 `scripts/inject/quit-app.js` 桥接到关窗 |
+
+---
+
+以下是上游 Pake 的原始说明：
+
 <div align="center">
   <img src="https://raw.githubusercontent.com/tw93/Pake/23bd253908a9b67be433faca0c84d3f857586d85/assets/logo.png" width="138" />
   <h1>Pake</h1>
