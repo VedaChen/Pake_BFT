@@ -14,93 +14,81 @@
    - macOS：`assets/bft-icon.png`（≥256×256，PNG；**macOS 不能用 ico**，Pake 转换会失败并回退成默认图标）
 4. 若你的 fork 私有，注意 Actions 在私有仓库有额度限制，且部分 runner（如 `macos-latest`）可能不可用，建议保持公开
 
-## 二、触发打包（GitHub Actions）
+## 二、触发打包（一个 Action 出全部安装包）
 
 ### 2.1 前置检查（一次性）
 
-打开 **Settings → Actions → General**：
+**Settings → Actions → General**：
 
 - **Actions permissions**：允许使用 Actions
-- **Workflow permissions**：选 **Read and write permissions**（workflow 需要读取仓库内容；本仓库已设为 write）
+- **Workflow permissions**：选 **Read and write permissions**
 
-### 2.2 网页操作
+### 2.2 操作步骤
 
 1. 进入 **Actions** 标签页
-2. 左侧选 **Build App With Pake CLI**
-3. 点右侧 **Run workflow** → 选 `main` → 填参数 → **Run workflow**
-4. 等运行结束（Windows 约 7–10 分钟，macOS 约 8–12 分钟；带 WebView2 的正式包会再久一点）
+2. 左侧选 **打包百分兔（正式+测试 · Windows+macOS）**
+3. **Run workflow**，只需要填 5 个参数：
 
-### 2.3 参数说明
-
-| 参数 | 必填 | 说明 / 建议值 |
+| 参数 | 说明 | 建议 |
 | --- | --- | --- |
-| `platform` | ✅ | `windows-latest`（Win）/ `macos-latest`（mac） |
-| `url` | ✅ | 生产 `https://sc.baifentu.net/web_app/#/`；测试 `https://tiku.baifentu.net/web_app/#/` |
-| `name` | ✅ | 产品名，也是安装目录/快捷方式名：生产 `百分兔`，测试 `百分兔测试` |
-| `icon` |  | 图标 raw URL，例 `https://raw.githubusercontent.com/<你的账号>/Pake_BFT/main/assets/bft-icon.ico` |
-| `safe_domain` |  | 域锁定：生产 `sc.baifentu.net`，测试 `tiku.baifentu.net` |
-| `installer_language` |  | **必须 `zh-CN`**，否则中文产品名在 WiX 打包阶段失败 |
-| `window_mode` |  | `fullscreen`（全屏、无最小化/最大化/关闭，用网页「退出应用」退出）/ `window`（普通窗口）/ `frameless`（无标题栏） |
-| `bundle_webview` |  | 正式包填 `true`：Windows 内嵌离线 WebView2（约 140MB），macOS 塞占位资源撑体积；测试包填 `false`（小包） |
-| `app_version` |  | **每次发版必须递增**（如 1.1.2 → 1.1.3），否则 Windows 安装包不会替换已安装的 exe |
-| `width` / `height` |  | `1200` / `780` |
-| `fullscreen` / `maximize` |  | 保持 `false`（窗口模式由 `window_mode` 控制） |
+| `app_version` | 版本号，**每次必须比上次大** | 例 `1.1.4` |
+| `window_mode` | 窗口模式 | `fullscreen`（全屏无按钮，网页「退出应用」退出） |
+| `platform` | 打哪些平台 | `all` |
+| `environment` | 打哪些环境 | `all`（正式+测试） |
+| `merge_artifact` | 是否合并成一个压缩包 | `true` |
 
-### 2.4 推荐配置（两套环境）
+一次运行会并行产出 **8 个安装包**：正式/测试 × Windows(x64, arm64) × macOS(arm64, x64)。
+URL、产品名、域名锁定、图标、WebView2（正式内嵌/测试小包）都已在 workflow 里写死，**不用手填**。
 
-| | 生产 | 测试 |
-| --- | --- | --- |
-| url | `https://sc.baifentu.net/web_app/#/` | `https://tiku.baifentu.net/web_app/#/` |
-| name | `百分兔` | `百分兔测试` |
-| safe_domain | `sc.baifentu.net` | `tiku.baifentu.net` |
-| window_mode | `fullscreen` | `fullscreen` |
-| bundle_webview | `true`（大包） | `false`（小包） |
-
-### 2.5 命令行触发（可选）
+### 2.3 命令行触发（可选）
 
 ```bash
 export GH_TOKEN=<你的 token，需 repo + workflow 权限>
 
-gh workflow run "Build App With Pake CLI" --repo <你的账号>/Pake_BFT \
-  -f platform="windows-latest" \
-  -f url="https://sc.baifentu.net/web_app/#/" \
-  -f name="百分兔" \
-  -f icon="https://raw.githubusercontent.com/<你的账号>/Pake_BFT/main/assets/bft-icon.ico" \
-  -f safe_domain="sc.baifentu.net" \
-  -f installer_language="zh-CN" \
-  -f window_mode="fullscreen" \
-  -f bundle_webview=true \
-  -f app_version="1.1.3" \
-  -f width="1200" -f height="780" \
-  -f fullscreen=false -f maximize=false
+gh workflow run "打包百分兔（正式+测试 · Windows+macOS）" --repo <你的账号>/Pake_BFT   -f app_version="1.1.4"   -f window_mode="fullscreen"   -f platform="all"   -f environment="all"   -f merge_artifact=true
 ```
 
 ## 三、下载产物
 
-### 3.1 网页下载
+### 3.1 网页下载（推荐，点一次）
 
-**Actions → 点进某次运行 → 页面最下方 Artifacts 区域 → 点产物名**，会下载一个 zip。
+运行结束后，页面最下方 **Artifacts** 里只有一个：
 
-产物名形如：`百分兔-Windows-x64`、`百分兔-Windows-arm64`、`百分兔-macOS-arm64`、`百分兔-macOS-x64`。
-解压后文件名为 `<产品名>-<架构>-v<版本>.msi`（Windows）或 `.dmg`（macOS）。
+```
+百分兔-全部安装包-v1.1.4.zip
+```
+
+下载解压即可，里面是：
+
+```
+百分兔-x64-v1.1.4.msi         正式 Windows x64（内嵌离线 WebView2）
+百分兔-arm64-v1.1.4.msi       正式 Windows arm64
+百分兔-arm64-v1.1.4.dmg       正式 macOS Apple Silicon
+百分兔-x64-v1.1.4.dmg         正式 macOS Intel
+百分兔测试-x64-v1.1.4.msi     测试 Windows x64（小包）
+百分兔测试-arm64-v1.1.4.msi   测试 Windows arm64
+百分兔测试-arm64-v1.1.4.dmg   测试 macOS Apple Silicon
+百分兔测试-x64-v1.1.4.dmg     测试 macOS Intel
+```
+
+如果想单独下某一个，把 `merge_artifact` 设为 `false`，Artifacts 里就会出现 8 个独立产物（`prod-windows-x64`、`test-macos-arm64` 等）。
 
 ### 3.2 命令行下载
 
 ```bash
-gh run list  --repo <你的账号>/Pake_BFT --workflow "Build App With Pake CLI" --limit 5
+gh run list  --repo <你的账号>/Pake_BFT --limit 5
 gh run watch <run-id> --repo <你的账号>/Pake_BFT
 gh run download <run-id> --repo <你的账号>/Pake_BFT -D ./output
 ```
 
 ### 3.3 直链格式
 
-某次运行里每个产物的下载地址：
-
 ```
 https://github.com/<你的账号>/Pake_BFT/actions/runs/<run-id>/artifacts/<artifact-id>
 ```
 
-`run-id` 在运行页面 URL 里；`artifact-id` 可用 `gh api repos/<账号>/Pake_BFT/actions/runs/<run-id>/artifacts` 查到。
+`run-id` 在运行页面 URL 里；`artifact-id` 用
+`gh api repos/<账号>/Pake_BFT/actions/runs/<run-id>/artifacts` 查。
 
 ## 四、本地打包（仅 Windows）
 
