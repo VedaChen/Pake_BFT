@@ -323,17 +323,35 @@ jobs:
           Write-Host "Running: node dist/cli.js $($args -join ' ')"
           node dist/cli.js $args
 
-          # The CLI leaves <name>.msi at the repo root; stamp the arch so x64 and
-          # arm64 runs don't collide and the artifacts are self-describing.
+          $buildExit = $LASTEXITCODE
+
+          # The CLI normally copies the installer to the repo root as <name>.msi,
+          # then we stamp the arch so the two matrix runs don't collide. On
+          # Windows arm64 it instead looks for "..._aarch64_..." while Tauri names
+          # the file "..._arm64_..." (upstream naming bug), so recover the MSI
+          # from the bundle directory when the root copy is missing.
           $msi = "$($env:INPUT_NAME).msi"
           $stamped = "$($env:INPUT_NAME)-$($env:INPUT_TARGETS).msi"
+          if (-not (Test-Path $msi)) {
+            $found = Get-ChildItem -Path "src-tauri/target" -Recurse -Filter *.msi -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 1
+            if ($found) {
+              Copy-Item -LiteralPath $found.FullName -Destination $msi
+              Write-Host "Recovered installer from $($found.FullName)"
+            }
+          }
+
           if (Test-Path $msi) {
             Move-Item -Force $msi $stamped
             Write-Host "Produced $stamped"
           } else {
-            Write-Error "Expected $msi but it was not found"
+            Write-Error "No MSI was produced"
             Get-ChildItem -Path . -Recurse -Filter *.msi | Select-Object -ExpandProperty FullName | Write-Host
             exit 1
+          }
+
+          if ($buildExit -ne 0) {
+            Write-Warning "pake exited with code $buildExit, but the MSI was recovered"
           }
 
           git checkout -- src-tauri/Cargo.lock
