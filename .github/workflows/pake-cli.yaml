@@ -6,6 +6,8 @@ name: 打包百分兔（正式+测试 · Windows+macOS）
 # 最后一个 job 会把所有产物合并成一个 zip，只需下载一次。
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       app_version:
@@ -55,6 +57,7 @@ concurrency:
 
 env:
   PNPM_VERSION: "10.26.2"
+  APP_VERSION: ${{ github.event.inputs.app_version || '1.1.6' }}
 
 # 只读取仓库内容；产物通过 artifact 上传。
 permissions:
@@ -149,7 +152,7 @@ jobs:
           INPUT_URL: ${{ matrix.url }}
           INPUT_NAME: ${{ matrix.name }}
           INPUT_SAFE_DOMAIN: ${{ matrix.domain }}
-          INPUT_APP_VERSION: ${{ inputs.app_version }}
+          INPUT_APP_VERSION: ${{ env.APP_VERSION }}
           INPUT_WINDOW_MODE: ${{ inputs.window_mode }}
           INPUT_ARCH: ${{ matrix.arch }}
         run: |
@@ -193,7 +196,7 @@ jobs:
           INPUT_URL: ${{ matrix.url }}
           INPUT_NAME: ${{ matrix.name }}
           INPUT_SAFE_DOMAIN: ${{ matrix.domain }}
-          INPUT_APP_VERSION: ${{ inputs.app_version }}
+          INPUT_APP_VERSION: ${{ env.APP_VERSION }}
           INPUT_WINDOW_MODE: ${{ inputs.window_mode }}
           INPUT_ARCH: ${{ matrix.arch }}
         run: |
@@ -232,15 +235,15 @@ jobs:
         with:
           name: ${{ matrix.label }}
           path: |
-            ${{ matrix.name }}-${{ matrix.arch }}-v${{ inputs.app_version }}.msi
-            ${{ matrix.name }}-${{ matrix.arch }}-v${{ inputs.app_version }}.dmg
+            ${{ matrix.name }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.msi
+            ${{ matrix.name }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.dmg
           retention-days: 3
           if-no-files-found: error
 
   merge:
     name: 合并全部安装包
     needs: build
-    if: ${{ inputs.merge_artifact }}
+    if: ${{ inputs.merge_artifact != false }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v5
@@ -260,14 +263,14 @@ jobs:
 
       - uses: actions/upload-artifact@v6
         with:
-          name: 百分兔-全部安装包-v${{ inputs.app_version }}
+          name: 百分兔-全部安装包-v${{ env.APP_VERSION }}
           path: installers/*
           retention-days: 3
 
   release:
     name: 发布到 Release
     needs: build
-    if: ${{ inputs.publish_release }}
+    if: ${{ inputs.publish_release != false }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -290,8 +293,8 @@ jobs:
       - name: Publish release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ inputs.app_version }}
-          name: 百分兔 v${{ inputs.app_version }}
+          tag_name: v${{ env.APP_VERSION }}
+          name: 百分兔 v${{ env.APP_VERSION }}
           body: |
             自动构建产物（窗口模式：${{ inputs.window_mode }}）
 
