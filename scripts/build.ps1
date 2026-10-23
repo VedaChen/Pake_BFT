@@ -102,6 +102,14 @@ function Remove-OldArtifacts {
             Remove-Item -LiteralPath $_.FullName -Force -ErrorAction SilentlyContinue
             Write-Host ('    已删除旧包：{0}' -f $_.Name) -ForegroundColor DarkGray
         }
+
+    # 顺手清掉早期按版本建子目录留下的目录（如 output\1.1.0\）
+    Get-ChildItem -Path $script:OutputDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -match '^[0-9]+\.[0-9]+(\.[0-9]+)?$' } |
+        ForEach-Object {
+            Remove-Item -LiteralPath $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+            Write-Host ('    已删除旧目录：{0}' -f $_.Name) -ForegroundColor DarkGray
+        }
 }
 
 function Write-Title {
