@@ -73,7 +73,7 @@ gh workflow run "打包百分兔（正式+测试 · Windows+macOS）" --repo <�
 
 如果想单独下某一个，把 `merge_artifact` 设为 `false`，Artifacts 里就会出现 8 个独立产物（`prod-windows-x64`、`test-macos-arm64` 等）。
 
-### 3.1.1 Release 直链（推荐给最终用户）
+### 3.2 Release 直链（推荐给最终用户）
 
 `publish_release=true`（默认）时，构建结束会自动创建 Release，tag 为 `v<版本>`：
 
