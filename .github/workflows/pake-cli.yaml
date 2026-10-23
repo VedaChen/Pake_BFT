@@ -97,7 +97,7 @@ permissions:
 jobs:
   build:
     name: ${{ inputs.platform }}
-    if: inputs.platform != 'windows-latest'
+    if: inputs.platform == 'ubuntu-24.04'
     runs-on: ${{ inputs.platform }}
     strategy:
       fail-fast: false
@@ -393,4 +393,91 @@ jobs:
         with:
           name: ${{ inputs.name }}-Windows-${{ matrix.arch }}
           path: ${{ inputs.name }}-${{ matrix.arch }}.msi
+          retention-days: 3
+
+  macos:
+    name: macOS (${{ matrix.arch }})
+    if: inputs.platform == 'macos-latest'
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch:
+          - arm64
+          - x64
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js Environment
+        uses: ./.github/actions/setup-env
+        with:
+          mode: build
+
+      - name: Build CLI
+        run: pnpm run cli:build
+
+      - name: Build App (macOS)
+        timeout-minutes: 40
+        shell: bash
+        env:
+          INPUT_URL: ${{ inputs.url }}
+          INPUT_NAME: ${{ inputs.name }}
+          INPUT_ICON: ${{ inputs.icon }}
+          INPUT_SAFE_DOMAIN: ${{ inputs.safe_domain }}
+          INPUT_WIDTH: ${{ inputs.width }}
+          INPUT_HEIGHT: ${{ inputs.height }}
+          INPUT_MIN_WIDTH: ${{ inputs.min_width }}
+          INPUT_MIN_HEIGHT: ${{ inputs.min_height }}
+          INPUT_APP_VERSION: ${{ inputs.app_version }}
+          INPUT_FULLSCREEN: ${{ inputs.fullscreen }}
+          INPUT_HIDE_TITLE_BAR: ${{ inputs.hide_title_bar }}
+          INPUT_NEW_WINDOW: ${{ inputs.new_window }}
+          INPUT_WINDOW_MODE: ${{ inputs.window_mode }}
+          INPUT_TARGETS: ${{ matrix.arch }}
+        run: |
+          ARGS=("$INPUT_URL" "--name" "$INPUT_NAME" "--targets" "$INPUT_TARGETS")
+
+          if [ -n "$INPUT_ICON" ]; then ARGS+=("--icon" "$INPUT_ICON"); fi
+          if [ -n "$INPUT_SAFE_DOMAIN" ]; then ARGS+=("--safe-domain" "$INPUT_SAFE_DOMAIN"); fi
+          if [ -n "$INPUT_WIDTH" ]; then ARGS+=("--width" "$INPUT_WIDTH"); fi
+          if [ -n "$INPUT_HEIGHT" ]; then ARGS+=("--height" "$INPUT_HEIGHT"); fi
+          if [ -n "$INPUT_MIN_WIDTH" ]; then ARGS+=("--min-width" "$INPUT_MIN_WIDTH"); fi
+          if [ -n "$INPUT_MIN_HEIGHT" ]; then ARGS+=("--min-height" "$INPUT_MIN_HEIGHT"); fi
+          if [ -n "$INPUT_APP_VERSION" ]; then ARGS+=("--app-version" "$INPUT_APP_VERSION"); fi
+          if [ "$INPUT_FULLSCREEN" == "true" ]; then ARGS+=("--fullscreen"); fi
+          if [ "$INPUT_HIDE_TITLE_BAR" == "true" ]; then ARGS+=("--hide-title-bar"); fi
+          if [ "$INPUT_NEW_WINDOW" == "true" ]; then ARGS+=("--new-window"); fi
+          if [ "$INPUT_WINDOW_MODE" == "frameless" ]; then ARGS+=("--hide-window-decorations"); fi
+
+          # The page's 退出应用 button closes the window; macOS defaults to hiding
+          # the app instead of quitting, so disable that.
+          ARGS+=("--inject" "scripts/inject/quit-app.js" "--hide-on-close" "false")
+
+          printf 'Running: node dist/cli.js'
+          printf ' %q' "${ARGS[@]}"
+          echo
+          node dist/cli.js "${ARGS[@]}"
+
+          git checkout -- src-tauri/Cargo.lock
+
+          DMG="$INPUT_NAME.dmg"
+          STAMPED="$INPUT_NAME-$INPUT_TARGETS.dmg"
+          if [ -f "$DMG" ]; then
+            mv -f "$DMG" "$STAMPED"
+          else
+            FOUND=$(find src-tauri/target -name '*.dmg' -type f | head -1)
+            if [ -n "$FOUND" ]; then cp -f "$FOUND" "$STAMPED"; fi
+          fi
+          if [ ! -f "$STAMPED" ]; then echo "::error::No DMG produced"; exit 1; fi
+          ls -lh "$STAMPED"
+
+      - name: Upload DMG (macOS)
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ inputs.name }}-macOS-${{ matrix.arch }}
+          path: ${{ inputs.name }}-${{ matrix.arch }}.dmg
           retention-days: 3
