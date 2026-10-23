@@ -62,6 +62,11 @@ on:
           - fullscreen
           - frameless
         default: window
+      bundle_webview:
+        description: "Bundle WebView2 offline installer (Windows, ~140MB) / size ballast (macOS). Only for production builds."
+        required: false
+        type: boolean
+        default: false
       hide_title_bar:
         description: "Hide title bar (macOS only)"
         required: false
@@ -266,6 +271,11 @@ jobs:
         shell: bash
         run: rustup target add aarch64-pc-windows-msvc
 
+      # 正式版内嵌 WebView2 离线安装包（Tauri 自动下载对应架构），测试版保持小包。
+      - name: Configure WebView2 bundling
+        shell: bash
+        run: node scripts/ci/configure-bundle.mjs windows ${{ inputs.bundle_webview }}
+
       - name: Build App (Windows)
         timeout-minutes: 25
         shell: pwsh
@@ -334,7 +344,7 @@ jobs:
 
           # 网页「退出应用」按钮原本请求本地 127.0.0.1:19876，这里注入的脚本
           # 会把它接到 Tauri 的关窗上，所以任何窗口模式都能用网页按钮退出。
-          $args += "--inject", "scripts/inject/quit-app.js"
+          $args += "--inject", "scripts/inject/quit-app.js,scripts/inject/disable-context-menu.js"
 
           if ($env:INPUT_WINDOW_MODE -eq "fullscreen") {
             $args += "--fullscreen"
@@ -363,7 +373,7 @@ jobs:
           # the file "..._arm64_..." (upstream naming bug), so recover the MSI
           # from the bundle directory when the root copy is missing.
           $msi = "$($env:INPUT_NAME).msi"
-          $stamped = "$($env:INPUT_NAME)-$($env:INPUT_TARGETS).msi"
+          $stamped = "$($env:INPUT_NAME)-$($env:INPUT_TARGETS)-v$($env:INPUT_APP_VERSION).msi"
           if (-not (Test-Path $msi)) {
             $found = Get-ChildItem -Path "src-tauri/target" -Recurse -Filter *.msi -ErrorAction SilentlyContinue |
               Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -392,7 +402,7 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.name }}-Windows-${{ matrix.arch }}
-          path: ${{ inputs.name }}-${{ matrix.arch }}.msi
+          path: ${{ inputs.name }}-${{ matrix.arch }}-v${{ inputs.app_version }}.msi
           retention-days: 3
 
   macos:
@@ -419,6 +429,16 @@ jobs:
 
       - name: Build CLI
         run: pnpm run cli:build
+
+      # macOS 没有 WebView2 可装，正式版只塞一个占位资源把 dmg 撑大。
+      - name: Configure bundle ballast
+        shell: bash
+        run: |
+          node scripts/ci/configure-bundle.mjs macos ${{ inputs.bundle_webview }}
+          if [ "${{ inputs.bundle_webview }}" == "true" ]; then
+            curl -sSL -o src-tauri/webview2-runtime.cab               "https://api.nuget.org/v3-flatcontainer/webview2.runtime.x64/156.0.4314.42/webview2.runtime.x64.156.0.4314.42.nupkg"
+            ls -lh src-tauri/webview2-runtime.cab
+          fi
 
       - name: Build App (macOS)
         timeout-minutes: 40
@@ -462,7 +482,7 @@ jobs:
 
           # The page's 退出应用 button closes the window; macOS defaults to hiding
           # the app instead of quitting, so disable that.
-          ARGS+=("--inject" "scripts/inject/quit-app.js" "--hide-on-close" "false")
+          ARGS+=("--inject" "scripts/inject/quit-app.js,scripts/inject/disable-context-menu.js" "--hide-on-close" "false")
 
           printf 'Running: node dist/cli.js'
           printf ' %q' "${ARGS[@]}"
@@ -472,7 +492,7 @@ jobs:
           git checkout -- src-tauri/Cargo.lock
 
           DMG="$INPUT_NAME.dmg"
-          STAMPED="$INPUT_NAME-$INPUT_TARGETS.dmg"
+          STAMPED="$INPUT_NAME-$INPUT_TARGETS-v$INPUT_APP_VERSION.dmg"
           if [ -f "$DMG" ]; then
             mv -f "$DMG" "$STAMPED"
           else
@@ -486,5 +506,5 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ${{ inputs.name }}-macOS-${{ matrix.arch }}
-          path: ${{ inputs.name }}-${{ matrix.arch }}.dmg
+          path: ${{ inputs.name }}-${{ matrix.arch }}-v${{ inputs.app_version }}.dmg
           retention-days: 3

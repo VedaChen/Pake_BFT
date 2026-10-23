@@ -30,6 +30,7 @@
 | installer_language | `zh-CN`（**必须**，见 §5.1） | `zh-CN` |
 | app_version | 每次发版必须递增（**必须**，见 §5.2） | 同左 |
 | window_mode | `window`（有最小化/最大化/关闭）/ `fullscreen`（全屏无按钮）/ `frameless`（无标题栏） | 同左 |
+| bundle_webview | `true`（内嵌离线 WebView2 ≈140MB / mac 塞占位资源） | `false`（小包） |
 
 两个包的 `identifier` 由 `md5(url + "::" + name)` 生成，URL 不同 → identifier 不同 → 可以同时安装、互不覆盖。
 
@@ -49,6 +50,7 @@ icon            : https://raw.githubusercontent.com/VedaChen/Pake_BFT/main/asset
 safe_domain     : sc.baifentu.net
 installer_language: zh-CN
 window_mode     : fullscreen（或 window / frameless）
+bundle_webview  : true（正式）/ false（测试）
 app_version     : 1.1.0（每次发版必须在此基础 +1，见 §5.2）
 width / height  : 1200 / 780
 fullscreen/maximize: false（由 window_mode 控制，保持 false）
@@ -129,6 +131,15 @@ window.close()
 
 ---
 
+## 4.1 安装包体积策略
+
+| 环境 | Windows | macOS | 目的 |
+| --- | --- | --- | --- |
+| 正式 | `bundle_webview=true` → `webviewInstallMode: offlineInstaller`（Tauri 构建时下载对应架构的离线安装包并内嵌，安装时缺失则自动离线安装）≈140MB | 把一个占位资源 `src-tauri/webview2-runtime.cab` 塞进 `bundle.resources`（macOS 的 WKWebView 是系统组件，没有可装的运行时，纯为撑体积） | 用户不用自己装 WebView2，包体也显得正式 |
+| 测试 | `bundle_webview=false` → 不内嵌，约 3.5MB | 不塞资源，约 5MB | 内部分发省流量 |
+
+开关由 `scripts/ci/configure-bundle.mjs` 在打包前改写 `src-tauri/tauri.windows.conf.json` / `tauri.macos.conf.json`，本地脚本在结束后用 `git checkout` 还原。
+
 ## 5. 已知坑（都是实际踩过的）
 
 ### 5.1 中文应用名必须 `--installer-language zh-CN`
@@ -180,7 +191,7 @@ cd <仓库目录>
 
 脚本自动完成：首次 `pnpm install` → `pnpm run cli:build` → 按架构调 `node dist/cli.js` → arm64 自动加 Rust target → 兜底取回 msi → 汇总到 `output\`。
 
-产物（文件名带版本号）：`output\百分兔-1.1.1-x64.msi`、`output\百分兔测试-1.1.1-arm64.msi` 等。
+产物直接放 `output\`，文件名带版本：`output\百分兔-x64-v1.1.2.msi`、`output\百分兔测试-arm64-v1.1.2.msi`。
 
 `output\` 已在 `.gitignore` 中忽略，不会进版本库。
 

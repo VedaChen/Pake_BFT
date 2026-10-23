@@ -9,7 +9,7 @@
     - Rust（winget install --id Rustlang.Rustup -e）
     - Visual Studio Build Tools（"使用 C++ 的桌面开发"工作负载）
 
-  产物：仓库根目录下的 output\ 文件夹
+  产物：output\<版本>\ 文件夹（例如 output\1.1.2\）
   版本号：每次打包自动把最后一位 +1（记录在 output\version.txt）
 #>
 
@@ -24,16 +24,20 @@ $script:SessionVersion = $null
 
 $environments = [ordered]@{
     '1' = @{
+        Key        = 'prod'
         Label      = '生产环境'
         Url        = 'https://sc.baifentu.net/web_app/#/'
         Name       = '百分兔'
         SafeDomain = 'sc.baifentu.net'
+        Bundle     = $true
     }
     '2' = @{
+        Key        = 'test'
         Label      = '测试环境'
         Url        = 'https://tiku.baifentu.net/web_app/#/'
         Name       = '百分兔测试'
         SafeDomain = 'tiku.baifentu.net'
+        Bundle     = $false
     }
 }
 
@@ -210,6 +214,12 @@ function Invoke-Build {
     Write-Host ('    域锁定   : {0}' -f $Environment.SafeDomain)
     Write-Host ('    窗口     : {0}' -f $WindowMode.Label)
     Write-Host ('    版本     : {0}（自动 +1，上次 {1}）' -f $appVersion, $version.Previous)
+    if ($Environment.Bundle) {
+        Write-Host '    WebView2 : 内嵌离线安装包（安装包约 140MB）'
+    }
+    else {
+        Write-Host '    WebView2 : 不内嵌（保持小包）'
+    }
     Write-Host ''
 
     $confirm = Read-Host '  开始打包？[Y/n]'
@@ -244,6 +254,17 @@ function Invoke-Build {
             Pause-Menu
             return
         }
+    }
+
+    $bundleFlag = 'false'
+    if ($Environment.Bundle) { $bundleFlag = 'true' }
+    Write-Host ''
+    Write-Host ('==> 配置 WebView2 打包（{0}）' -f $bundleFlag) -ForegroundColor Green
+    node scripts/ci/configure-bundle.mjs windows $bundleFlag
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host 'configure-bundle 失败。' -ForegroundColor Red
+        Pause-Menu
+        return
     }
 
     Write-Host ''
@@ -307,7 +328,7 @@ function Invoke-Build {
             Write-Warning ('pake 退出码 {0}，但已取回安装包。' -f $pakeExit)
         }
 
-        $finalPath = Join-Path $outputDir ('{0}-{1}-{2}.msi' -f $Environment.Name, $appVersion, $oneArch)
+        $finalPath = Join-Path $outputDir ('{0}-{1}-v{2}.msi' -f $Environment.Name, $oneArch, $appVersion)
         Move-Item -LiteralPath $rootMsi -Destination $finalPath -Force
         $sizeMb = [math]::Round((Get-Item -LiteralPath $finalPath).Length / 1MB, 2)
         $built += New-Object psobject -Property ([ordered]@{
@@ -327,6 +348,9 @@ function Invoke-Build {
     else {
         Write-Host '没有生成任何安装包，请查看上面的报错。' -ForegroundColor Red
     }
+
+    # 还原 tauri.*.conf.json，避免影响下一次(不同环境)的打包
+    node scripts/ci/configure-bundle.mjs restore | Out-Null
     Pause-Menu
 }
 
