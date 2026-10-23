@@ -1,0 +1,164 @@
+name: "Pake Web App Builder"
+description: "Transform any webpage into a lightweight desktop app using Rust and Tauri"
+author: "tw93"
+branding:
+  icon: "package"
+  color: "blue"
+
+inputs:
+  url:
+    description: "Target URL to package"
+    required: true
+
+  name:
+    description: "Application name"
+    required: true
+
+  output-dir:
+    description: "Output directory for packages"
+    required: false
+    default: "dist"
+
+  icon:
+    description: "Custom app icon URL or path"
+    required: false
+
+  width:
+    description: "Window width"
+    required: false
+    default: "1200"
+
+  height:
+    description: "Window height"
+    required: false
+    default: "780"
+
+  debug:
+    description: "Enable debug mode"
+    required: false
+    default: "false"
+
+outputs:
+  package-path:
+    description: "Path to the generated package"
+    value: ${{ steps.build.outputs.package-path }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Environment
+      shell: bash
+      run: |
+        # Install Node.js dependencies
+        npm install
+
+        # Build Pake CLI if not exists
+        if [ ! -f "dist/cli.js" ]; then
+          npm run cli:build
+        fi
+
+        # Install Rust/Cargo if needed
+        if ! command -v cargo &> /dev/null; then
+          rustup_init="$(mktemp)"
+          trap 'rm -f "$rustup_init"' EXIT
+          curl --proto '=https' --tlsv1.2 -sSf -o "$rustup_init" https://sh.rustup.rs
+          sh "$rustup_init" -y
+          source ~/.cargo/env
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+        fi
+
+    - name: Build Pake App
+      id: build
+      shell: bash
+      env:
+        INPUT_URL: ${{ inputs.url }}
+        INPUT_NAME: ${{ inputs.name }}
+        INPUT_ICON: ${{ inputs.icon }}
+        INPUT_WIDTH: ${{ inputs.width }}
+        INPUT_HEIGHT: ${{ inputs.height }}
+        INPUT_DEBUG: ${{ inputs.debug }}
+        INPUT_OUTPUT_DIR: ${{ inputs.output-dir }}
+      run: |
+        if [[ "$INPUT_OUTPUT_DIR" == *$'\n'* || "$INPUT_OUTPUT_DIR" == *$'\r'* ]]; then
+          echo "❌ Output directory must not contain line breaks" >&2
+          exit 1
+        fi
+
+        # Build arguments
+        ARGS=("$INPUT_URL")
+
+        ARGS+=("--name" "$INPUT_NAME")
+
+        if [ -n "$INPUT_ICON" ]; then
+          ARGS+=("--icon" "$INPUT_ICON")
+        fi
+
+        ARGS+=("--width" "$INPUT_WIDTH")
+        ARGS+=("--height" "$INPUT_HEIGHT")
+
+        if [ "$INPUT_DEBUG" == "true" ]; then
+          ARGS+=("--debug")
+        fi
+
+        # Create output directory
+        mkdir -p -- "$INPUT_OUTPUT_DIR"
+        export PAKE_CREATE_APP=1
+
+        # The CLI copies the final package into the working directory as
+        # <name>.<ext> (the name may be normalized, e.g. lowercased on Linux)
+        # and deletes the bundle under src-tauri/target, so select the file it
+        # wrote here during this run rather than searching the target tree.
+        # Linux defaults to deb,appimage (rpm,appimage on RPM distros) and still
+        # succeeds when only one target builds, so accept any of them.
+        case "$RUNNER_OS" in
+          Windows) PACKAGE_EXTS=(msi) ;;
+          Linux) PACKAGE_EXTS=(deb rpm AppImage) ;;
+          macOS) PACKAGE_EXTS=(app) ;;
+          *)
+            echo "❌ Unsupported runner OS: $RUNNER_OS" >&2
+            exit 1
+            ;;
+        esac
+        BUILD_MARKER="$(mktemp)"
+        trap 'rm -f "$BUILD_MARKER"' EXIT
+
+        # Run Pake CLI
+        printf '🔧 Running:'
+        printf ' %q' node dist/cli.js "${ARGS[@]}"
+        printf '\n'
+        node dist/cli.js "${ARGS[@]}"
+
+        # Pick the package for this platform, in preference order
+        PACKAGE=""
+        for EXT in "${PACKAGE_EXTS[@]}"; do
+          MATCHES=()
+          while IFS= read -r -d '' MATCH; do
+            MATCHES+=("$MATCH")
+          done < <(find . -maxdepth 1 -name "*.$EXT" -newer "$BUILD_MARKER" -print0)
+          if [ "${#MATCHES[@]}" -gt 1 ]; then
+            echo "❌ Multiple .$EXT packages found: ${MATCHES[*]}" >&2
+            exit 1
+          fi
+          if [ "${#MATCHES[@]}" -eq 1 ]; then
+            PACKAGE="${MATCHES[0]#./}"
+            break
+          fi
+        done
+        if [ -n "$PACKAGE" ]; then
+          # Move to output directory
+          BASENAME=$(basename "$PACKAGE")
+          PACKAGE_PATH="$INPUT_OUTPUT_DIR/$BASENAME"
+          if [[ "$PACKAGE_PATH" == *$'\n'* || "$PACKAGE_PATH" == *$'\r'* ]]; then
+            echo "❌ Package path must not contain line breaks" >&2
+            exit 1
+          fi
+          if [ ! "$PACKAGE" -ef "$PACKAGE_PATH" ]; then
+            rm -rf -- "$PACKAGE_PATH"
+            mv -- "$PACKAGE" "$PACKAGE_PATH"
+          fi
+          printf 'package-path=%s\n' "$PACKAGE_PATH" >> "$GITHUB_OUTPUT"
+          printf '✅ Package created: %s\n' "$PACKAGE_PATH"
+        else
+          echo "❌ No package found"
+          exit 1
+        fi
