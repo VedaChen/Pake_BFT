@@ -441,7 +441,13 @@ jobs:
         run: |
           ARGS=("$INPUT_URL" "--name" "$INPUT_NAME" "--targets" "$INPUT_TARGETS")
 
-          if [ -n "$INPUT_ICON" ]; then ARGS+=("--icon" "$INPUT_ICON"); fi
+          # macOS 只认 .icns；Pake 会用 sharp 把 png 转成 icns，但 sharp 读不了 .ico，
+          # 传 .ico 会静默退化成默认图标。所以把 .ico 换成同名 .png。
+          ICON="$INPUT_ICON"
+          case "$ICON" in
+            *.ico) ICON="${ICON%.ico}.png" ;;
+          esac
+          if [ -n "$ICON" ]; then ARGS+=("--icon" "$ICON"); fi
           if [ -n "$INPUT_SAFE_DOMAIN" ]; then ARGS+=("--safe-domain" "$INPUT_SAFE_DOMAIN"); fi
           if [ -n "$INPUT_WIDTH" ]; then ARGS+=("--width" "$INPUT_WIDTH"); fi
           if [ -n "$INPUT_HEIGHT" ]; then ARGS+=("--height" "$INPUT_HEIGHT"); fi

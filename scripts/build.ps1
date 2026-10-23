@@ -10,12 +10,17 @@
     - Visual Studio Build Tools（"使用 C++ 的桌面开发"工作负载）
 
   产物：仓库根目录下的 output\ 文件夹
+  版本号：每次打包自动把最后一位 +1（记录在 output\version.txt）
 #>
 
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
 Push-Location $repoRoot
+
+$script:OutputDir = Join-Path $repoRoot 'output'
+$script:VersionFile = Join-Path $script:OutputDir 'version.txt'
+$script:SessionVersion = $null
 
 $environments = [ordered]@{
     '1' = @{
@@ -51,6 +56,35 @@ $windowModes = [ordered]@{
         Label = '无边框窗口（隐藏标题栏，不能拖动）'
         Flags = @('--hide-window-decorations')
     }
+}
+
+function Get-SessionVersion {
+    if ($null -ne $script:SessionVersion) { return $script:SessionVersion }
+
+    $previous = '1.1.0'
+    if (Test-Path -LiteralPath $script:VersionFile) {
+        $saved = Get-Content -LiteralPath $script:VersionFile -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($saved) { $saved = $saved.Trim() }
+        if ($saved -match '^[0-9]+(\.[0-9]+){0,2}$') { $previous = $saved }
+    }
+
+    $parts = @($previous.Split('.'))
+    while ($parts.Count -lt 3) { $parts += '0' }
+    $last = 0
+    [void][int]::TryParse($parts[2], [ref]$last)
+    $parts[2] = [string]($last + 1)
+
+    $script:SessionVersion = [pscustomobject]@{
+        Previous = $previous
+        Next     = ($parts -join '.')
+    }
+    return $script:SessionVersion
+}
+
+function Save-SessionVersion {
+    $version = Get-SessionVersion
+    New-Item -ItemType Directory -Force -Path $script:OutputDir | Out-Null
+    Set-Content -LiteralPath $script:VersionFile -Value $version.Next -Encoding ASCII
 }
 
 function Write-Title {
@@ -164,19 +198,18 @@ function Invoke-Build {
     Write-Host ('  窗口：{0}' -f $WindowMode.Label) -ForegroundColor White
     Write-Host ''
 
-    $versionInput = Read-Host '  版本号（直接回车 = 1.0.0）'
-    $appVersion = '1.0.0'
-    if (-not [string]::IsNullOrWhiteSpace($versionInput)) { $appVersion = $versionInput.Trim() }
-
     $width = '1200'
     $height = '780'
+
+    $version = Get-SessionVersion
+    $appVersion = $version.Next
 
     Write-Host ''
     Write-Host ('  将生成：{0}' -f $Environment.Name) -ForegroundColor DarkCyan
     Write-Host ('    地址     : {0}' -f $Environment.Url)
     Write-Host ('    域锁定   : {0}' -f $Environment.SafeDomain)
     Write-Host ('    窗口     : {0}' -f $WindowMode.Label)
-    Write-Host ('    版本     : {0}' -f $appVersion)
+    Write-Host ('    版本     : {0}（自动 +1，上次 {1}）' -f $appVersion, $version.Previous)
     Write-Host ''
 
     $confirm = Read-Host '  开始打包？[Y/n]'
@@ -222,7 +255,7 @@ function Invoke-Build {
         return
     }
 
-    $outputDir = Join-Path $repoRoot 'output'
+    $outputDir = $script:OutputDir
     New-Item -ItemType Directory -Force -Path $outputDir | Out-Null
 
     $built = @()
@@ -274,7 +307,7 @@ function Invoke-Build {
             Write-Warning ('pake 退出码 {0}，但已取回安装包。' -f $pakeExit)
         }
 
-        $finalPath = Join-Path $outputDir ('{0}-{1}.msi' -f $Environment.Name, $oneArch)
+        $finalPath = Join-Path $outputDir ('{0}-{1}-{2}.msi' -f $Environment.Name, $appVersion, $oneArch)
         Move-Item -LiteralPath $rootMsi -Destination $finalPath -Force
         $sizeMb = [math]::Round((Get-Item -LiteralPath $finalPath).Length / 1MB, 2)
         $built += New-Object psobject -Property ([ordered]@{
@@ -286,7 +319,8 @@ function Invoke-Build {
 
     Write-Host ''
     if ($built.Count -gt 0) {
-        Write-Host '打包完成：' -ForegroundColor Green
+        Save-SessionVersion
+        Write-Host ('打包完成（版本 {0}）：' -f $appVersion) -ForegroundColor Green
         $built | Format-Table -AutoSize
         Write-Host ('输出目录：{0}' -f $outputDir) -ForegroundColor Green
     }
