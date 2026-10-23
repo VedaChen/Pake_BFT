@@ -416,7 +416,14 @@ async function mergeIcons(
       tauriConf.bundle.icon = [iconInfo.defaultIcon];
     } else {
       const iconPath = path.join(npmDirectory, 'src-tauri/', iconInfo.path);
-      tauriConf.bundle.resources = [iconInfo.path];
+      // 合并而不是覆盖：平台配置文件里可能已经声明了额外的 resources
+      // （例如 macOS 用来撑体积的占位文件），不能被图标冲掉。
+      const existingResources = Array.isArray(tauriConf.bundle.resources)
+        ? tauriConf.bundle.resources
+        : [];
+      tauriConf.bundle.resources = Array.from(
+        new Set([...existingResources, iconInfo.path]),
+      );
 
       const absoluteDestPath = path.resolve(iconPath);
       if (resolvedIconPath !== absoluteDestPath) {
