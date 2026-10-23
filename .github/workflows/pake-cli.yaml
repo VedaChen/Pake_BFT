@@ -53,6 +53,15 @@ on:
         required: false
         type: boolean
         default: false
+      window_mode:
+        description: "Window mode: window (native buttons), fullscreen (no buttons), frameless (no title bar)"
+        required: false
+        type: choice
+        options:
+          - window
+          - fullscreen
+          - frameless
+        default: window
       hide_title_bar:
         description: "Hide title bar (macOS only)"
         required: false
@@ -276,6 +285,7 @@ jobs:
           INPUT_NEW_WINDOW: ${{ inputs.new_window }}
           INPUT_TARGETS: ${{ matrix.arch }}
           INPUT_MAXIMIZE: ${{ inputs.maximize }}
+          INPUT_WINDOW_MODE: ${{ inputs.window_mode }}
         run: |
           $args = $env:INPUT_URL, "--name", $env:INPUT_NAME, "--targets", $env:INPUT_TARGETS
 
@@ -320,6 +330,18 @@ jobs:
 
           if ($env:INPUT_MAXIMIZE -eq "true") {
             $args += "--maximize"
+          }
+
+          # 网页「退出应用」按钮原本请求本地 127.0.0.1:19876，这里注入的脚本
+          # 会把它接到 Tauri 的关窗上，所以任何窗口模式都能用网页按钮退出。
+          $args += "--inject", "scripts/inject/quit-app.js"
+
+          if ($env:INPUT_WINDOW_MODE -eq "fullscreen") {
+            $args += "--fullscreen"
+          }
+
+          if ($env:INPUT_WINDOW_MODE -eq "frameless") {
+            $args += "--hide-window-decorations"
           }
 
           if ($env:INPUT_HIDE_TITLE_BAR -eq "true") {

@@ -38,6 +38,21 @@ $architectures = [ordered]@{
     '3' = @{ Label = '两个都要（x64+arm64）'; List = @('x64', 'arm64') }
 }
 
+$windowModes = [ordered]@{
+    '1' = @{
+        Label = '普通窗口（有最小化/最大化/关闭）'
+        Flags = @()
+    }
+    '2' = @{
+        Label = '全屏（隐藏全部按钮，用网页「退出应用」退出）'
+        Flags = @('--fullscreen')
+    }
+    '3' = @{
+        Label = '无边框窗口（隐藏标题栏，不能拖动）'
+        Flags = @('--hide-window-decorations')
+    }
+}
+
 function Write-Title {
     Write-Host ''
     Write-Host '==================================================' -ForegroundColor DarkCyan
@@ -114,12 +129,39 @@ function Get-Architecture {
     }
 }
 
+function Get-WindowMode {
+    param($Environment)
+
+    while ($true) {
+        Write-Title
+        Write-Host ('  环境：{0}' -f $Environment.Label) -ForegroundColor White
+        Write-Host ''
+        Write-Host '  请选择窗口模式：' -ForegroundColor White
+        Write-Host ''
+        foreach ($key in $windowModes.Keys) {
+            Write-Host ('   {0}. {1}' -f $key, $windowModes[$key].Label)
+        }
+        Write-Host '   0. 返回环境选择'
+        Write-Host ''
+        Write-Host '  提示：全屏 / 无边框模式没有系统按钮，靠网页的「退出应用」退出。' -ForegroundColor DarkGray
+        Write-Host ''
+        $choice = Read-Host '输入序号'
+
+        if ($choice -eq '0') { return $null }
+        if ($windowModes.Contains($choice)) { return $windowModes[$choice] }
+
+        Write-Host '输入无效，请重新选择。' -ForegroundColor Red
+        Start-Sleep -Milliseconds 700
+    }
+}
+
 function Invoke-Build {
-    param($Environment, $Architecture)
+    param($Environment, $Architecture, $WindowMode)
 
     Write-Title
     Write-Host ('  环境：{0}' -f $Environment.Label) -ForegroundColor White
     Write-Host ('  架构：{0}' -f $Architecture.Label) -ForegroundColor White
+    Write-Host ('  窗口：{0}' -f $WindowMode.Label) -ForegroundColor White
     Write-Host ''
 
     $versionInput = Read-Host '  版本号（直接回车 = 1.0.0）'
@@ -133,7 +175,8 @@ function Invoke-Build {
     Write-Host ('  将生成：{0}' -f $Environment.Name) -ForegroundColor DarkCyan
     Write-Host ('    地址     : {0}' -f $Environment.Url)
     Write-Host ('    域锁定   : {0}' -f $Environment.SafeDomain)
-    Write-Host ('    版本/窗口 : {0} / {1}x{2}' -f $appVersion, $width, $height)
+    Write-Host ('    窗口     : {0}' -f $WindowMode.Label)
+    Write-Host ('    版本     : {0}' -f $appVersion)
     Write-Host ''
 
     $confirm = Read-Host '  开始打包？[Y/n]'
@@ -147,6 +190,13 @@ function Invoke-Build {
     $iconPath = Join-Path $repoRoot 'assets\bft-icon.ico'
     if (-not (Test-Path -LiteralPath $iconPath)) {
         Write-Host ('找不到图标：{0}' -f $iconPath) -ForegroundColor Red
+        Pause-Menu
+        return
+    }
+
+    $injectPath = Join-Path $repoRoot 'scripts\inject\quit-app.js'
+    if (-not (Test-Path -LiteralPath $injectPath)) {
+        Write-Host ('找不到注入脚本：{0}' -f $injectPath) -ForegroundColor Red
         Pause-Menu
         return
     }
@@ -193,8 +243,10 @@ function Invoke-Build {
             '--safe-domain', $Environment.SafeDomain,
             '--installer-language', 'zh-CN',
             '--targets', $oneArch,
-            '--app-version', $appVersion
+            '--app-version', $appVersion,
+            '--inject', $injectPath
         )
+        if ($WindowMode.Flags.Count -gt 0) { $pakeArgs += $WindowMode.Flags }
         Write-Host ('    node dist/cli.js {0}' -f ($pakeArgs -join ' ')) -ForegroundColor DarkGray
 
         & node dist/cli.js @pakeArgs
@@ -252,7 +304,10 @@ try {
         $selectedArchitecture = Get-Architecture -Environment $selectedEnvironment
         if ($null -eq $selectedArchitecture) { continue }
 
-        Invoke-Build -Environment $selectedEnvironment -Architecture $selectedArchitecture
+        $selectedWindowMode = Get-WindowMode -Environment $selectedEnvironment
+        if ($null -eq $selectedWindowMode) { continue }
+
+        Invoke-Build -Environment $selectedEnvironment -Architecture $selectedArchitecture -WindowMode $selectedWindowMode
     }
     Write-Host ''
     Write-Host '已退出。' -ForegroundColor DarkGray
