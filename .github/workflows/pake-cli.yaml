@@ -248,6 +248,13 @@ jobs:
       - name: Show collected files
         run: ls -lh installers
 
+      - name: Verify artifacts
+        run: |
+          set -e
+          count=$(find installers -type f -size +0 | wc -l)
+          echo "collected $count non-empty artifacts"
+          test "$count" -gt 0
+
       - uses: actions/upload-artifact@v6
         with:
           name: 百分兔-全部安装包-v${{ inputs.app_version }}
@@ -269,6 +276,13 @@ jobs:
 
       - name: Show files
         run: ls -lh installers
+
+      - name: Verify artifacts
+        run: |
+          set -e
+          count=$(find installers -type f -size +0 | wc -l)
+          echo "collected $count non-empty artifacts"
+          test "$count" -gt 0
 
       - name: Publish release
         uses: softprops/action-gh-release@v2
