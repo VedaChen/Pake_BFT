@@ -1,0 +1,49 @@
+name: 同步代码到 Gitee
+
+# GitHub 每次 push 到 main 后，自动把代码镜像到 Gitee 仓库（只同步源码，不含 Actions 产物）。
+# 需要的仓库 Secrets：
+#   GITEE_TOKEN    —— Gitee 私人令牌（推荐）或账号密码
+#   GITEE_USERNAME —— Gitee 用户名（可选，默认 chenjunjie9764）
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mirror-gitee
+  cancel-in-progress: true
+
+jobs:
+  mirror:
+    name: Push to Gitee
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Push mirror
+        shell: bash
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_USERNAME: ${{ secrets.GITEE_USERNAME }}
+        run: |
+          if [ -z "$GITEE_TOKEN" ]; then
+            echo "::error::缺少 Secrets.GITEE_TOKEN，无法同步到 Gitee"
+            exit 1
+          fi
+
+          user="${GITEE_USERNAME:-chenjunjie9764}"
+          # 令牌/密码里可能有 @ : 等字符，先做 URL 编码
+          token_enc=$(printf '%s' "$GITEE_TOKEN" | jq -sRr @uri)
+          remote="https://${user}:${token_enc}@gitee.com/baifentu/baifentuzhuomianduangoujian.git"
+
+          git push --force "$remote" "HEAD:master"
+          echo "已同步 $(git rev-parse --short HEAD) 到 Gitee master"
