@@ -49,8 +49,11 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  NODE_VERSION: "22"
   PNPM_VERSION: "10.26.2"
 
 # 只读取仓库内容；产物通过 artifact 上传。
