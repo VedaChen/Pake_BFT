@@ -48,6 +48,11 @@ on:
         required: false
         type: boolean
         default: false
+      maximize:
+        description: "Start maximized (keeps the native title bar and its buttons)"
+        required: false
+        type: boolean
+        default: false
       hide_title_bar:
         description: "Hide title bar (macOS only)"
         required: false
@@ -270,6 +275,7 @@ jobs:
           INPUT_HIDE_TITLE_BAR: ${{ inputs.hide_title_bar }}
           INPUT_NEW_WINDOW: ${{ inputs.new_window }}
           INPUT_TARGETS: ${{ matrix.arch }}
+          INPUT_MAXIMIZE: ${{ inputs.maximize }}
         run: |
           $args = $env:INPUT_URL, "--name", $env:INPUT_NAME, "--targets", $env:INPUT_TARGETS
 
@@ -310,6 +316,10 @@ jobs:
 
           if ($env:INPUT_FULLSCREEN -eq "true") {
             $args += "--fullscreen"
+          }
+
+          if ($env:INPUT_MAXIMIZE -eq "true") {
+            $args += "--maximize"
           }
 
           if ($env:INPUT_HIDE_TITLE_BAR -eq "true") {
