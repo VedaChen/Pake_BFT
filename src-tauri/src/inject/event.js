@@ -990,7 +990,6 @@ document.addEventListener("DOMContentLoaded", () => {
     },
     true,
   );
-
 });
 
 // Bridge the Web Notification + Web Badging APIs to Pake's Rust commands so

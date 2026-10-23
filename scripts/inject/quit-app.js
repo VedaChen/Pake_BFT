@@ -10,12 +10,16 @@
  * Windows 下 hide_on_close 默认关闭，关掉最后一个窗口即退出进程。
  */
 (function () {
-  var QUIT_HOST = '127.0.0.1:19876';
+  var QUIT_HOST = "127.0.0.1:19876";
   var closing = false;
 
   function currentTauriWindow() {
     var tauri = window.__TAURI__;
-    if (!tauri || !tauri.window || typeof tauri.window.getCurrentWindow !== 'function') {
+    if (
+      !tauri ||
+      !tauri.window ||
+      typeof tauri.window.getCurrentWindow !== "function"
+    ) {
       return null;
     }
     try {
@@ -28,7 +32,7 @@
   function closeApp() {
     if (closing) return true;
     var current = currentTauriWindow();
-    if (!current || typeof current.close !== 'function') return false;
+    if (!current || typeof current.close !== "function") return false;
     closing = true;
     try {
       Promise.resolve(current.close()).catch(function () {
@@ -52,18 +56,18 @@
   }
 
   function urlOf(input) {
-    if (typeof input === 'string') return input;
-    if (input && typeof input.url === 'string') return input.url;
-    return '';
+    if (typeof input === "string") return input;
+    if (input && typeof input.url === "string") return input.url;
+    return "";
   }
 
   var nativeFetch = window.fetch;
-  if (typeof nativeFetch === 'function') {
+  if (typeof nativeFetch === "function") {
     window.fetch = function (input, init) {
       var url = urlOf(input);
       if (url && url.indexOf(QUIT_HOST) !== -1) {
         requestQuit();
-        return Promise.resolve(new Response('', { status: 200 }));
+        return Promise.resolve(new Response("", { status: 200 }));
       }
       return nativeFetch.apply(this, arguments);
     };
@@ -73,13 +77,14 @@
   window.close = function () {
     if (closeApp()) return;
     try {
-      if (typeof nativeClose === 'function') nativeClose.apply(window, arguments);
+      if (typeof nativeClose === "function")
+        nativeClose.apply(window, arguments);
     } catch (error) {
       /* 主窗口不允许脚本关闭时忽略 */
     }
   };
 
   // 兜底：网页若改用 __TAURI__ 或自定义事件，也能触发退出。
-  window.addEventListener('pake:quit', requestQuit);
+  window.addEventListener("pake:quit", requestQuit);
   window.pakeQuitApp = requestQuit;
 })();

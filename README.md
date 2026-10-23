@@ -29,13 +29,13 @@
 2. 左侧选 **打包百分兔（正式+测试 · Windows+macOS）**
 3. **Run workflow**，只需要填 5 个参数：
 
-| 参数 | 说明 | 建议 |
-| --- | --- | --- |
-| `app_version` | 版本号，**每次必须比上次大** | 例 `1.1.4` |
-| `window_mode` | 窗口模式 | `fullscreen`（全屏无按钮，网页「退出应用」退出） |
-| `platform` | 打哪些平台 | `all` |
-| `environment` | 打哪些环境 | `all`（正式+测试） |
-| `merge_artifact` | 是否合并成一个压缩包 | `true` |
+| 参数             | 说明                         | 建议                                             |
+| ---------------- | ---------------------------- | ------------------------------------------------ |
+| `app_version`    | 版本号，**每次必须比上次大** | 例 `1.1.4`                                       |
+| `window_mode`    | 窗口模式                     | `fullscreen`（全屏无按钮，网页「退出应用」退出） |
+| `platform`       | 打哪些平台                   | `all`                                            |
+| `environment`    | 打哪些环境                   | `all`（正式+测试）                               |
+| `merge_artifact` | 是否合并成一个压缩包         | `true`                                           |
 
 一次运行会并行产出 **8 个安装包**：正式/测试 × Windows(x64, arm64) × macOS(arm64, x64)。
 URL、产品名、域名锁定、图标、WebView2（正式内嵌/测试小包）都已在 workflow 里写死，**不用手填**。
@@ -106,14 +106,14 @@ cd <仓库目录>
 
 ## 五、必须知道的几个坑
 
-| 坑 | 说明 |
-| --- | --- |
-| 中文名打包失败 | 必须传 `installer_language=zh-CN`（默认 `en-US` 代码页打不了中文，`light.exe` 报错） |
-| 装了新包没变化 | 同版本 msi 不会替换已安装的 exe，**每次必须递增 `app_version`**；或先卸载再装 |
-| macOS 图标不生效 | macOS 只认 png/icns，传 `.ico` 会静默回退默认图标；仓库已放 `assets/bft-icon.png` |
-| arm64 msi 构建报 ENOENT | Pake 按 `aarch64` 找文件、Tauri 实际写 `arm64`；workflow 已有兜底从 bundle 目录取回 |
-| macOS 打不开提示「已损坏」 | 未签名/未公证，右键 →「打开」，或 `系统设置 → 隐私与安全性 → 仍要打开` |
-| 想关掉网页右键菜单 | `scripts/inject/disable-context-menu.js` 已注入；网页「退出应用」由 `scripts/inject/quit-app.js` 桥接到关窗 |
+| 坑                         | 说明                                                                                                        |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| 中文名打包失败             | 必须传 `installer_language=zh-CN`（默认 `en-US` 代码页打不了中文，`light.exe` 报错）                        |
+| 装了新包没变化             | 同版本 msi 不会替换已安装的 exe，**每次必须递增 `app_version`**；或先卸载再装                               |
+| macOS 图标不生效           | macOS 只认 png/icns，传 `.ico` 会静默回退默认图标；仓库已放 `assets/bft-icon.png`                           |
+| arm64 msi 构建报 ENOENT    | Pake 按 `aarch64` 找文件、Tauri 实际写 `arm64`；workflow 已有兜底从 bundle 目录取回                         |
+| macOS 打不开提示「已损坏」 | 未签名/未公证，右键 →「打开」，或 `系统设置 → 隐私与安全性 → 仍要打开`                                      |
+| 想关掉网页右键菜单         | `scripts/inject/disable-context-menu.js` 已注入；网页「退出应用」由 `scripts/inject/quit-app.js` 桥接到关窗 |
 
 ---
 
