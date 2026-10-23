@@ -73,6 +73,17 @@ gh workflow run "打包百分兔（正式+测试 · Windows+macOS）" --repo <�
 
 如果想单独下某一个，把 `merge_artifact` 设为 `false`，Artifacts 里就会出现 8 个独立产物（`prod-windows-x64`、`test-macos-arm64` 等）。
 
+### 3.1.1 Release 直链（推荐给最终用户）
+
+`publish_release=true`（默认）时，构建结束会自动创建 Release，tag 为 `v<版本>`：
+
+```
+https://github.com/<账号>/Pake_BFT/releases/tag/v1.1.4
+https://github.com/<账号>/Pake_BFT/releases/download/v1.1.4/百分兔-x64-v1.1.4.msi
+```
+
+Release 附件的下载**不需要登录 GitHub**，适合直接发给用户；同名文件重复发布会覆盖。
+
 ### 3.2 命令行下载
 
 ```bash

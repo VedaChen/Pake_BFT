@@ -43,6 +43,11 @@ on:
         required: false
         type: boolean
         default: true
+      publish_release:
+        description: "构建完成后自动发布到 GitHub Release（tag: v<版本>）"
+        required: false
+        type: boolean
+        default: true
 
 env:
   NODE_VERSION: "22"
@@ -248,3 +253,33 @@ jobs:
           name: 百分兔-全部安装包-v${{ inputs.app_version }}
           path: installers/*
           retention-days: 3
+
+  release:
+    name: 发布到 Release
+    needs: build
+    if: ${{ inputs.publish_release }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          path: installers
+          merge-multiple: true
+
+      - name: Show files
+        run: ls -lh installers
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.app_version }}
+          name: 百分兔 v${{ inputs.app_version }}
+          body: |
+            自动构建产物（窗口模式：${{ inputs.window_mode }}）
+
+            - 正式：Windows x64 / arm64、macOS arm64 / x64
+            - 测试：Windows x64 / arm64、macOS arm64 / x64
+          files: installers/*
+          fail_on_unmatched_files: true
+          overwrite_files: true
