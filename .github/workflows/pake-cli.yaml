@@ -299,4 +299,3 @@ jobs:
             - 测试：Windows x64 / arm64、macOS arm64 / x64
           files: installers/*
           fail_on_unmatched_files: true
-          overwrite_files: true
