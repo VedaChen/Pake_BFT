@@ -74,8 +74,8 @@ jobs:
         id: matrix
         shell: bash
         env:
-          PLATFORM: ${{ inputs.platform }}
-          ENVIRONMENT: ${{ inputs.environment }}
+          PLATFORM: ${{ inputs.platform || 'all' }}
+          ENVIRONMENT: ${{ inputs.environment || 'all' }}
         run: |
           node -e '
             const platform = process.env.PLATFORM;
