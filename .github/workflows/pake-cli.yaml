@@ -300,5 +300,4 @@ jobs:
             --title "百分兔 v${{ env.APP_VERSION }}" \
             --notes "自动构建产物（窗口模式：${{ env.WINDOW_MODE }}）
             - 正式：Windows x64 / arm64、macOS arm64 / x64
-            - 测试：Windows x64 / arm64、macOS arm64 / x64" \
-            --clobber
+            - 测试：Windows x64 / arm64、macOS arm64 / x64"
