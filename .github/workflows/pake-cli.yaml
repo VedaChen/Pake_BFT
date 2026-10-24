@@ -96,7 +96,7 @@ jobs:
 
             const include = [];
             for (const env of envs) for (const item of osList) for (const arch of item.arches) {
-              include.push({ ...env, os: item.os, arch, label: env.key + "-" + (item.os === "windows-latest" ? "windows" : "macos") + "-" + arch });
+              include.push({ ...env, os: item.os, arch, label: env.key + "-" + (item.os === "windows-latest" ? "windows" : "macos") + "-" + arch, file: env.key === "prod" ? "baifentu" : "baifentu-test" });
             }
 
             console.log(include.length + " jobs");
@@ -152,6 +152,7 @@ jobs:
         env:
           INPUT_URL: ${{ matrix.url }}
           INPUT_NAME: ${{ matrix.name }}
+          INPUT_FILE: ${{ matrix.file }}
           INPUT_SAFE_DOMAIN: ${{ matrix.domain }}
           INPUT_APP_VERSION: ${{ env.APP_VERSION }}
           INPUT_WINDOW_MODE: ${{ env.WINDOW_MODE }}
@@ -173,7 +174,7 @@ jobs:
           $buildExit = $LASTEXITCODE
 
           $msi = "$($env:INPUT_NAME).msi"
-          $stamped = "$($env:INPUT_NAME)-$($env:INPUT_ARCH)-v$($env:INPUT_APP_VERSION).msi"
+          $stamped = "$($env:INPUT_FILE)-$($env:INPUT_ARCH)-v$($env:INPUT_APP_VERSION).msi"
           if (-not (Test-Path $msi)) {
             $found = Get-ChildItem -Path "src-tauri/target" -Recurse -Filter *.msi -ErrorAction SilentlyContinue |
               Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -196,6 +197,7 @@ jobs:
         env:
           INPUT_URL: ${{ matrix.url }}
           INPUT_NAME: ${{ matrix.name }}
+          INPUT_FILE: ${{ matrix.file }}
           INPUT_SAFE_DOMAIN: ${{ matrix.domain }}
           INPUT_APP_VERSION: ${{ env.APP_VERSION }}
           INPUT_WINDOW_MODE: ${{ env.WINDOW_MODE }}
@@ -219,7 +221,7 @@ jobs:
           build_exit=$?
 
           DMG="$INPUT_NAME.dmg"
-          STAMPED="$INPUT_NAME-$INPUT_ARCH-v$INPUT_APP_VERSION.dmg"
+          STAMPED="$INPUT_FILE-$INPUT_ARCH-v$INPUT_APP_VERSION.dmg"
           if [ ! -f "$DMG" ]; then
             FOUND=$(find src-tauri/target -name '*.dmg' -type f | head -1)
             if [ -n "$FOUND" ]; then cp -f "$FOUND" "$DMG"; fi
@@ -236,8 +238,8 @@ jobs:
         with:
           name: ${{ matrix.label }}
           path: |
-            ${{ matrix.name }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.msi
-            ${{ matrix.name }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.dmg
+            ${{ matrix.file }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.msi
+            ${{ matrix.file }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.dmg
           retention-days: 3
           if-no-files-found: error
 
@@ -264,7 +266,7 @@ jobs:
 
       - uses: actions/upload-artifact@v6
         with:
-          name: 百分兔-全部安装包-v${{ env.APP_VERSION }}
+          name: baifentu-installers-v${{ env.APP_VERSION }}
           path: installers/*
           retention-days: 3
 
