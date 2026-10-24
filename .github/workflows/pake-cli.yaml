@@ -6,8 +6,6 @@ name: 打包百分兔（正式+测试 · Windows+macOS）
 # 最后一个 job 会把所有产物合并成一个 zip，只需下载一次。
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       app_version:
