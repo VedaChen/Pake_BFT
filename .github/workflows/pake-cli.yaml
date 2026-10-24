@@ -292,14 +292,14 @@ jobs:
           test "$count" -gt 0
 
       - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ env.APP_VERSION }}
-          name: 百分兔 v${{ env.APP_VERSION }}
-          body: |
-            自动构建产物（窗口模式：${{ env.WINDOW_MODE }}）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          gh release create "v${{ env.APP_VERSION }}" installers/* \
+            --title "百分兔 v${{ env.APP_VERSION }}" \
+            --notes "自动构建产物（窗口模式：${{ env.WINDOW_MODE }}）
 
-            - 正式：Windows x64 / arm64、macOS arm64 / x64
-            - 测试：Windows x64 / arm64、macOS arm64 / x64
-          files: installers/*
-          fail_on_unmatched_files: true
+- 正式：Windows x64 / arm64、macOS arm64 / x64
+- 测试：Windows x64 / arm64、macOS arm64 / x64" \
+            --clobber
