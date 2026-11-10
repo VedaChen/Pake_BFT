@@ -345,6 +345,9 @@ jobs:
 
           APPDIR="$TOOL_DIR/extract/squashfs-root"
 
+          # 不打包 Wayland 客户端库，避免包内旧版本覆盖宿主图形栈（WSLg/新版发行版易触发 EGL 初始化失败）。
+          find "$APPDIR/usr/lib" -maxdepth 2 -name 'libwayland-*.so*' -delete
+
           # 内置 Source Han Sans SC，保证目标系统缺少中文字体时也能正常显示。
           FONT_DIR="$APPDIR/usr/share/fonts/opentype/source-han-sans"
           mkdir -p "$FONT_DIR"
