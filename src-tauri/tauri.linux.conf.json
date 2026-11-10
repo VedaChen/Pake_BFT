@@ -5,6 +5,9 @@
     "linux": {
       "deb": {
         "depends": ["curl", "wget"]
+      },
+      "appimage": {
+        "bundleMediaFramework": true
       }
     },
     "targets": ["deb", "appimage"]

@@ -263,6 +263,21 @@ jobs:
 
           git checkout -- src-tauri/Cargo.lock
 
+      - name: Install GStreamer plugins (Linux)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            gstreamer1.0-plugins-base \
+            gstreamer1.0-plugins-good \
+            gstreamer1.0-plugins-bad \
+            gstreamer1.0-plugins-ugly \
+            gstreamer1.0-libav \
+            gstreamer1.0-gl \
+            gstreamer1.0-alsa \
+            gstreamer1.0-pulseaudio
+
       - name: Build app (Linux)
         if: matrix.os == 'ubuntu-24.04'
         shell: bash
