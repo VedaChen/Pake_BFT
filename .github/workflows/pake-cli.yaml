@@ -344,11 +344,61 @@ jobs:
           (cd "$TOOL_DIR/extract" && "$APPIMAGE_ABS" --appimage-extract >/dev/null)
 
           APPDIR="$TOOL_DIR/extract/squashfs-root"
+
+          # 内置 Source Han Sans SC，保证目标系统缺少中文字体时也能正常显示。
+          FONT_DIR="$APPDIR/usr/share/fonts/opentype/source-han-sans"
+          mkdir -p "$FONT_DIR"
+          curl -sSL -o "$FONT_DIR/SourceHanSansSC-Regular.otf" \
+            "https://github.com/adobe-fonts/source-han-sans/raw/release/OTF/SimplifiedChinese/SourceHanSansSC-Regular.otf"
+          test -s "$FONT_DIR/SourceHanSansSC-Regular.otf"
+
+          mkdir -p "$APPDIR/etc/fonts/conf.d"
+          cat > "$APPDIR/etc/fonts/fonts.conf" <<'EOF'
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+          <fontconfig>
+            <include ignore_missing="yes">/etc/fonts/fonts.conf</include>
+            <include ignore_missing="yes">conf.d</include>
+          </fontconfig>
+          EOF
+          cat > "$APPDIR/etc/fonts/conf.d/99-source-han-sans.conf" <<'EOF'
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+          <fontconfig>
+            <alias>
+              <family>sans-serif</family>
+              <prefer><family>Source Han Sans SC</family></prefer>
+            </alias>
+            <alias>
+              <family>system-ui</family>
+              <prefer><family>Source Han Sans SC</family></prefer>
+            </alias>
+            <match target="pattern">
+              <test name="lang" compare="contains"><string>zh</string></test>
+              <edit name="family" mode="prepend" binding="strong"><string>Source Han Sans SC</string></edit>
+            </match>
+          </fontconfig>
+          EOF
+
+          if command -v fc-match >/dev/null 2>&1; then
+            MATCHED="$(FONTCONFIG_PATH="$APPDIR/etc/fonts" XDG_DATA_DIRS="$APPDIR/usr/share" fc-match sans-serif)"
+            echo "fc-match: $MATCHED"
+            case "$MATCHED" in
+              *"Source Han Sans SC"*) ;;
+              *)
+                echo "::error::Source Han Sans SC is not the preferred sans-serif font"
+                exit 1
+                ;;
+            esac
+          fi
+
           mv "$APPDIR/AppRun" "$APPDIR/AppRun.real"
 
           cat > "$APPDIR/AppRun" <<'EOF'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
+          export FONTCONFIG_PATH="$HERE/etc/fonts"
+          export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
           BIN="$(find "$HERE/usr/bin" -maxdepth 1 -type f -print -quit 2>/dev/null || true)"
 
           MISSING=""
