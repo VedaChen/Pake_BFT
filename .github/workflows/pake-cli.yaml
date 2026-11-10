@@ -1,8 +1,8 @@
-name: 打包百分兔（正式+测试 · Windows+macOS）
+name: 打包百分兔（正式+测试 · Windows+macOS+Linux）
 
 # 一次运行产出全部安装包：
-#   正式 Windows x64/arm64、正式 macOS arm64/x64
-#   测试 Windows x64/arm64、测试 macOS arm64/x64
+#   正式 Windows x64/arm64、正式 macOS arm64/x64、正式 Linux x64 AppImage
+#   测试 Windows x64/arm64、测试 macOS arm64/x64、测试 Linux x64 AppImage
 # 最后一个 job 会把所有产物合并成一个 zip，只需下载一次。
 
 on:
@@ -30,6 +30,7 @@ on:
           - all
           - windows
           - macos
+          - linux
         default: all
       environment:
         description: "要打哪些环境"
@@ -91,12 +92,33 @@ jobs:
             }
 
             const osList = [];
-            if (platform === "all" || platform === "windows") osList.push({ os: "windows-latest", arches: ["x64", "arm64"] });
-            if (platform === "all" || platform === "macos") osList.push({ os: "macos-latest", arches: ["arm64", "x64"] });
+            if (platform === "all" || platform === "windows") osList.push({
+              os: "windows-latest",
+              platform: "windows",
+              arches: [{ arch: "x64", target: "x64" }, { arch: "arm64", target: "arm64" }],
+            });
+            if (platform === "all" || platform === "macos") osList.push({
+              os: "macos-latest",
+              platform: "macos",
+              arches: [{ arch: "arm64", target: "arm64" }, { arch: "x64", target: "x64" }],
+            });
+            if (platform === "all" || platform === "linux") osList.push({
+              os: "ubuntu-24.04",
+              platform: "linux",
+              arches: [{ arch: "x64", target: "appimage" }],
+            });
 
             const include = [];
-            for (const env of envs) for (const item of osList) for (const arch of item.arches) {
-              include.push({ ...env, os: item.os, arch, label: env.key + "-" + (item.os === "windows-latest" ? "windows" : "macos") + "-" + arch, file: env.key === "prod" ? "baifentu" : "baifentu-test" });
+            for (const env of envs) for (const item of osList) for (const entry of item.arches) {
+              include.push({
+                ...env,
+                os: item.os,
+                platform: item.platform,
+                arch: entry.arch,
+                target: entry.target,
+                label: env.key + "-" + item.platform + "-" + entry.arch,
+                file: env.key === "prod" ? "baifentu" : "baifentu-test",
+              });
             }
 
             console.log(include.length + " jobs");
@@ -104,7 +126,7 @@ jobs:
           '
 
   build:
-    name: ${{ matrix.name }} · ${{ matrix.os == 'windows-latest' && 'Windows' || 'macOS' }} ${{ matrix.arch }}
+    name: ${{ matrix.name }} · ${{ matrix.platform == 'windows' && 'Windows' || matrix.platform == 'macos' && 'macOS' || 'Linux' }} ${{ matrix.arch }}
     needs: prepare
     runs-on: ${{ matrix.os }}
     timeout-minutes: 60
@@ -131,20 +153,28 @@ jobs:
         shell: bash
         run: rustup target add aarch64-pc-windows-msvc
 
-      # 正式版：Windows 内嵌离线 WebView2；macOS 塞占位资源撑体积
+      # 正式版：Windows 内嵌离线 WebView2；macOS/Linux 塞占位资源撑体积
       - name: Configure bundle size
         shell: bash
         run: |
-          if [ "${{ matrix.os }}" == "windows-latest" ]; then
-            node scripts/ci/configure-bundle.mjs windows "${{ matrix.bundle }}"
-          else
-            node scripts/ci/configure-bundle.mjs macos "${{ matrix.bundle }}"
-            if [ "${{ matrix.bundle }}" == "true" ]; then
-              curl -sSL -o src-tauri/webview2-runtime.cab \
-                "https://api.nuget.org/v3-flatcontainer/webview2.runtime.x64/156.0.4314.42/webview2.runtime.x64.156.0.4314.42.nupkg"
-              ls -lh src-tauri/webview2-runtime.cab
-            fi
-          fi
+          case "${{ matrix.os }}" in
+            windows-latest)
+              node scripts/ci/configure-bundle.mjs windows "${{ matrix.bundle }}"
+              ;;
+            macos-latest|ubuntu-24.04)
+              if [ "${{ matrix.os }}" == "ubuntu-24.04" ]; then
+                PLATFORM=linux
+              else
+                PLATFORM=macos
+              fi
+              node scripts/ci/configure-bundle.mjs "$PLATFORM" "${{ matrix.bundle }}"
+              if [ "${{ matrix.bundle }}" == "true" ]; then
+                curl -sSL -o src-tauri/webview2-runtime.cab \
+                  "https://api.nuget.org/v3-flatcontainer/webview2.runtime.x64/156.0.4314.42/webview2.runtime.x64.156.0.4314.42.nupkg"
+                ls -lh src-tauri/webview2-runtime.cab
+              fi
+              ;;
+          esac
 
       - name: Build app (Windows)
         if: matrix.os == 'windows-latest'
@@ -233,6 +263,132 @@ jobs:
 
           git checkout -- src-tauri/Cargo.lock
 
+      - name: Build app (Linux)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        env:
+          INPUT_URL: ${{ matrix.url }}
+          INPUT_NAME: ${{ matrix.name }}
+          INPUT_FILE: ${{ matrix.file }}
+          INPUT_SAFE_DOMAIN: ${{ matrix.domain }}
+          INPUT_APP_VERSION: ${{ env.APP_VERSION }}
+          INPUT_WINDOW_MODE: ${{ env.WINDOW_MODE }}
+          INPUT_ARCH: ${{ matrix.arch }}
+          INPUT_TARGET: ${{ matrix.target }}
+        run: |
+          ARGS=("$INPUT_URL" "--name" "$INPUT_NAME" "--targets" "$INPUT_TARGET")
+          ARGS+=("--icon" "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/assets/bft-icon.png")
+          ARGS+=("--safe-domain" "$INPUT_SAFE_DOMAIN")
+          ARGS+=("--width" "1200" "--height" "780")
+          ARGS+=("--app-version" "$INPUT_APP_VERSION")
+          ARGS+=("--inject" "scripts/inject/quit-app.js,scripts/inject/disable-context-menu.js")
+          ARGS+=("--hide-on-close" "false")
+
+          if [ "$INPUT_WINDOW_MODE" == "fullscreen" ]; then ARGS+=("--fullscreen"); fi
+          if [ "$INPUT_WINDOW_MODE" == "frameless" ]; then ARGS+=("--hide-window-decorations"); fi
+
+          printf 'Running: node dist/cli.js'
+          printf ' %q' "${ARGS[@]}"
+          echo
+          node dist/cli.js "${ARGS[@]}"
+
+          APPIMAGE="$INPUT_NAME.AppImage"
+          STAMPED="$INPUT_FILE-linux-$INPUT_ARCH-v$INPUT_APP_VERSION.AppImage"
+          if [ ! -f "$APPIMAGE" ]; then
+            FOUND=$(find src-tauri/target -name '*.AppImage' -type f | head -1)
+            if [ -n "$FOUND" ]; then cp -f "$FOUND" "$APPIMAGE"; fi
+          fi
+          if [ ! -f "$APPIMAGE" ]; then
+            echo "::error::没有生成 AppImage"
+            find . -name '*.AppImage' -type f
+            exit 1
+          fi
+          mv -f "$APPIMAGE" "$STAMPED"
+          ls -lh "$STAMPED"
+
+          git checkout -- src-tauri/Cargo.lock
+
+      # AppImage 不会自带 WebKitGTK：缺库时给出可读提示，而不是白屏或双击无反应。
+      - name: Harden AppImage (dependency check)
+        if: matrix.os == 'ubuntu-24.04'
+        shell: bash
+        env:
+          INPUT_FILE: ${{ matrix.file }}
+          INPUT_ARCH: ${{ matrix.arch }}
+          INPUT_APP_VERSION: ${{ env.APP_VERSION }}
+        run: |
+          set -euo pipefail
+
+          APPIMAGE="$INPUT_FILE-linux-$INPUT_ARCH-v$INPUT_APP_VERSION.AppImage"
+          if [ ! -f "$APPIMAGE" ]; then
+            echo "::error::AppImage not found: $APPIMAGE"
+            exit 1
+          fi
+          chmod +x "$APPIMAGE"
+
+          if ! command -v mksquashfs >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y squashfs-tools
+          fi
+
+          TOOL_DIR="$(mktemp -d)"
+          trap 'rm -rf "$TOOL_DIR"' EXIT
+
+          # 固定版本，避免 continuous 标签漂移导致产物不可复现。
+          curl -sSL -o "$TOOL_DIR/appimagetool" \
+            "https://github.com/AppImage/appimagetool/releases/download/1.9.1/appimagetool-x86_64.AppImage"
+          chmod +x "$TOOL_DIR/appimagetool"
+
+          APPIMAGE_ABS="$(realpath "$APPIMAGE")"
+          mkdir -p "$TOOL_DIR/extract"
+          (cd "$TOOL_DIR/extract" && "$APPIMAGE_ABS" --appimage-extract >/dev/null)
+
+          APPDIR="$TOOL_DIR/extract/squashfs-root"
+          mv "$APPDIR/AppRun" "$APPDIR/AppRun.real"
+
+          cat > "$APPDIR/AppRun" <<'EOF'
+#!/bin/sh
+HERE="$(dirname "$(readlink -f "$0")")"
+BIN="$(find "$HERE/usr/bin" -maxdepth 1 -type f -print -quit 2>/dev/null || true)"
+
+MISSING=""
+if [ -n "$BIN" ]; then
+  MISSING="$(LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$BIN" 2>/dev/null | grep 'not found' || true)"
+fi
+
+if [ -n "$MISSING" ]; then
+  MSG="应用缺少运行依赖，无法启动。
+Missing runtime dependencies:
+
+$MISSING
+
+请先安装 WebKitGTK 4.1:
+  Ubuntu/Debian: sudo apt install libwebkit2gtk-4.1-0
+  Fedora:        sudo dnf install webkit2gtk4.1
+  Arch:          sudo pacman -S webkit2gtk-4.1"
+
+  if command -v zenity >/dev/null 2>&1; then
+    zenity --error --no-wrap --text="$MSG" 2>/dev/null || true
+  elif command -v kdialog >/dev/null 2>&1; then
+    kdialog --error "$MSG" 2>/dev/null || true
+  elif command -v xmessage >/dev/null 2>&1; then
+    xmessage -center "$MSG" 2>/dev/null || true
+  else
+    printf '%s\n' "$MSG" >&2
+  fi
+  exit 1
+fi
+
+exec "$HERE/AppRun.real" "$@"
+EOF
+          chmod +x "$APPDIR/AppRun"
+
+          ARCH=x86_64 "$TOOL_DIR/appimagetool" --appimage-extract-and-run \
+            "$APPDIR" "$TOOL_DIR/repacked.AppImage" >/dev/null
+          mv -f "$TOOL_DIR/repacked.AppImage" "$APPIMAGE_ABS"
+          chmod +x "$APPIMAGE_ABS"
+          ls -lh "$APPIMAGE"
+
       - name: Upload installer
         uses: actions/upload-artifact@v6
         with:
@@ -240,6 +396,7 @@ jobs:
           path: |
             ${{ matrix.file }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.msi
             ${{ matrix.file }}-${{ matrix.arch }}-v${{ env.APP_VERSION }}.dmg
+            ${{ matrix.file }}-linux-${{ matrix.arch }}-v${{ env.APP_VERSION }}.AppImage
           retention-days: 3
           if-no-files-found: error
 
@@ -302,8 +459,8 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --title "百分兔 v${{ env.APP_VERSION }}" \
             --notes "自动构建产物（窗口模式：${{ env.WINDOW_MODE }}）
-            - 正式：Windows x64 / arm64、macOS arm64 / x64
-            - 测试：Windows x64 / arm64、macOS arm64 / x64"
+            - 正式：Windows x64 / arm64、macOS arm64 / x64、Linux x64 AppImage
+            - 测试：Windows x64 / arm64、macOS arm64 / x64、Linux x64 AppImage"
           for f in installers/*; do
             for attempt in 1 2 3; do
               if gh release upload "v${{ env.APP_VERSION }}" "$f" --repo "$GITHUB_REPOSITORY" --clobber; then

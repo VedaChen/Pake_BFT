@@ -4,6 +4,8 @@
 //   node scripts/ci/configure-bundle.mjs windows false   # 测试版：保持小包
 //   node scripts/ci/configure-bundle.mjs macos true      # 正式版：塞一个占位资源撑体积
 //   node scripts/ci/configure-bundle.mjs macos false
+//   node scripts/ci/configure-bundle.mjs linux true      # 正式版：塞一个占位资源撑体积
+//   node scripts/ci/configure-bundle.mjs linux false
 //   node scripts/ci/configure-bundle.mjs restore         # 全部还原成仓库原始内容
 //
 // 说明：
@@ -11,6 +13,8 @@
 //   WebView2 离线安装包并内嵌，安装时若系统缺失会自动离线安装（约 +140MB）。
 // - macOS 的 WKWebView 属于系统组件，没有运行时可装；这里只是把一个占位文件
 //   作为 bundle.resources 打进去，纯粹让 dmg 体积变大。
+// - Linux 的 WebKitGTK 同样是系统组件，占位文件对运行没有任何帮助，只是让
+//   AppImage 的体积与 macOS 正式版保持在同一量级。
 
 import fs from "node:fs";
 import path from "node:path";
@@ -20,6 +24,7 @@ const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, "..", "..");
 const windowsConf = path.join(repoRoot, "src-tauri", "tauri.windows.conf.json");
 const macosConf = path.join(repoRoot, "src-tauri", "tauri.macos.conf.json");
+const linuxConf = path.join(repoRoot, "src-tauri", "tauri.linux.conf.json");
 const BALLAST = "webview2-runtime.cab";
 
 const readJson = (file) => JSON.parse(fs.readFileSync(file, "utf8"));
@@ -71,6 +76,29 @@ function configureMacos(enabled) {
   console.log(`[bundle] macos: ballast=${enabled ? BALLAST : "off"}`);
 }
 
+function configureLinux(enabled) {
+  const conf = readJson(linuxConf);
+  conf.bundle ??= {};
+
+  const resources = new Set(
+    Array.isArray(conf.bundle.resources) ? conf.bundle.resources : [],
+  );
+  if (enabled) {
+    resources.add(BALLAST);
+  } else {
+    resources.delete(BALLAST);
+  }
+
+  if (resources.size > 0) {
+    conf.bundle.resources = [...resources];
+  } else {
+    delete conf.bundle.resources;
+  }
+
+  writeJson(linuxConf, conf);
+  console.log(`[bundle] linux: ballast=${enabled ? BALLAST : "off"}`);
+}
+
 const [platform, value] = process.argv.slice(2);
 
 switch (platform) {
@@ -80,14 +108,21 @@ switch (platform) {
   case "macos":
     configureMacos(readFlag(value));
     break;
+  case "linux":
+    configureLinux(readFlag(value));
+    break;
   case "restore": {
     // 用 git 还原，避免 JSON 重新序列化带来的格式变化。
     const { execFileSync } = await import("node:child_process");
     try {
-      execFileSync("git", ["checkout", "--", windowsConf, macosConf], {
-        cwd: repoRoot,
-        stdio: "ignore",
-      });
+      execFileSync(
+        "git",
+        ["checkout", "--", windowsConf, macosConf, linuxConf],
+        {
+          cwd: repoRoot,
+          stdio: "ignore",
+        },
+      );
       console.log("[bundle] restored via git");
     } catch {
       console.log("[bundle] restore skipped (not a git checkout)");
@@ -96,7 +131,7 @@ switch (platform) {
   }
   default:
     console.error(
-      "usage: node scripts/ci/configure-bundle.mjs <windows|macos|restore> [true|false]",
+      "usage: node scripts/ci/configure-bundle.mjs <windows|macos|linux|restore> [true|false]",
     );
     process.exit(1);
 }
