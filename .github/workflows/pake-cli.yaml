@@ -347,40 +347,40 @@ jobs:
           mv "$APPDIR/AppRun" "$APPDIR/AppRun.real"
 
           cat > "$APPDIR/AppRun" <<'EOF'
-#!/bin/sh
-HERE="$(dirname "$(readlink -f "$0")")"
-BIN="$(find "$HERE/usr/bin" -maxdepth 1 -type f -print -quit 2>/dev/null || true)"
+          #!/bin/sh
+          HERE="$(dirname "$(readlink -f "$0")")"
+          BIN="$(find "$HERE/usr/bin" -maxdepth 1 -type f -print -quit 2>/dev/null || true)"
 
-MISSING=""
-if [ -n "$BIN" ]; then
-  MISSING="$(LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$BIN" 2>/dev/null | grep 'not found' || true)"
-fi
+          MISSING=""
+          if [ -n "$BIN" ]; then
+            MISSING="$(LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$BIN" 2>/dev/null | grep 'not found' || true)"
+          fi
 
-if [ -n "$MISSING" ]; then
-  MSG="应用缺少运行依赖，无法启动。
-Missing runtime dependencies:
+          if [ -n "$MISSING" ]; then
+            MSG="应用缺少运行依赖，无法启动。
+          Missing runtime dependencies:
 
-$MISSING
+          $MISSING
 
-请先安装 WebKitGTK 4.1:
-  Ubuntu/Debian: sudo apt install libwebkit2gtk-4.1-0
-  Fedora:        sudo dnf install webkit2gtk4.1
-  Arch:          sudo pacman -S webkit2gtk-4.1"
+          请先安装 WebKitGTK 4.1:
+            Ubuntu/Debian: sudo apt install libwebkit2gtk-4.1-0
+            Fedora:        sudo dnf install webkit2gtk4.1
+            Arch:          sudo pacman -S webkit2gtk-4.1"
 
-  if command -v zenity >/dev/null 2>&1; then
-    zenity --error --no-wrap --text="$MSG" 2>/dev/null || true
-  elif command -v kdialog >/dev/null 2>&1; then
-    kdialog --error "$MSG" 2>/dev/null || true
-  elif command -v xmessage >/dev/null 2>&1; then
-    xmessage -center "$MSG" 2>/dev/null || true
-  else
-    printf '%s\n' "$MSG" >&2
-  fi
-  exit 1
-fi
+            if command -v zenity >/dev/null 2>&1; then
+              zenity --error --no-wrap --text="$MSG" 2>/dev/null || true
+            elif command -v kdialog >/dev/null 2>&1; then
+              kdialog --error "$MSG" 2>/dev/null || true
+            elif command -v xmessage >/dev/null 2>&1; then
+              xmessage -center "$MSG" 2>/dev/null || true
+            else
+              printf '%s\n' "$MSG" >&2
+            fi
+            exit 1
+          fi
 
-exec "$HERE/AppRun.real" "$@"
-EOF
+          exec "$HERE/AppRun.real" "$@"
+          EOF
           chmod +x "$APPDIR/AppRun"
 
           ARCH=x86_64 "$TOOL_DIR/appimagetool" --appimage-extract-and-run \
