@@ -412,12 +412,44 @@ jobs:
 
           mv "$APPDIR/AppRun" "$APPDIR/AppRun.real"
 
+          # 捆绑的 GTK 自带 immodules.cache，只注册 GTK 自带模块（wayland/xim 等），
+          # 没有 fcitx/ibus 等桌面输入法模块。GTK 一旦按它加载，就找不到输入法模块，
+          # 表现是网页里光标能进输入框却打不了字（GNOME + fcitx5 必现）。
+          # 注释掉 hook 里的硬编码，改由 AppRun 在运行时挑宿主系统的 cache。
+          GTK_HOOK="$APPDIR/apprun-hooks/linuxdeploy-plugin-gtk.sh"
+          if [ -f "$GTK_HOOK" ]; then
+            sed -i 's|^export GTK_IM_MODULE_FILE=.*|# GTK_IM_MODULE_FILE 由 AppRun 决定：优先用宿主系统的 immodules.cache（含 fcitx5 等输入法模块）|' "$GTK_HOOK"
+          fi
+
           cat > "$APPDIR/AppRun" <<'EOF'
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
           export FONTCONFIG_PATH="$HERE/etc/fonts"
           export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
           BIN="$(find "$HERE/usr/bin" -maxdepth 1 -type f -print -quit 2>/dev/null || true)"
+
+          # 输入法模块：捆绑的 immodules.cache 里没有 fcitx/ibus，GTK 加载不到输入法，
+          # 输入框就完全打不了字。优先改用宿主系统的 cache（里面注册了输入法的绝对路径）。
+          GTK_IM_MODULE_FILE=""
+          for host_cache in \
+            /usr/lib/*/gtk-3.0/3.0.0/immodules.cache \
+            /usr/lib/gtk-3.0/3.0.0/immodules.cache \
+            /usr/share/gtk-3.0/immodules.cache; do
+            if [ -f "$host_cache" ]; then
+              GTK_IM_MODULE_FILE="$host_cache"
+              break
+            fi
+          done
+          if [ -z "$GTK_IM_MODULE_FILE" ] && [ -f "$HERE/usr/lib/gtk-3.0/3.0.0/immodules.cache" ]; then
+            GTK_IM_MODULE_FILE="$HERE/usr/lib/gtk-3.0/3.0.0/immodules.cache"
+          fi
+          if [ -n "$GTK_IM_MODULE_FILE" ]; then
+            export GTK_IM_MODULE_FILE
+          fi
+          # 宿主装了 fcitx5 却没设 GTK_IM_MODULE 时补上，保证输入法可用。
+          if [ -z "${GTK_IM_MODULE:-}" ] && [ -n "$GTK_IM_MODULE_FILE" ] && grep -q '^"fcitx"' "$GTK_IM_MODULE_FILE"; then
+            export GTK_IM_MODULE=fcitx
+          fi
 
           MISSING=""
           if [ -n "$BIN" ]; then
