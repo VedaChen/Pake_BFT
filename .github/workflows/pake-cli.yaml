@@ -425,35 +425,77 @@ jobs:
           #!/bin/sh
           HERE="$(dirname "$(readlink -f "$0")")"
           export FONTCONFIG_PATH="$HERE/etc/fonts"
-          export XDG_DATA_DIRS="$HERE/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
-          BIN="$(find "$HERE/usr/bin" -maxdepth 1 -type f -print -quit 2>/dev/null || true)"
 
-          # 输入法模块：捆绑的 immodules.cache 里没有 fcitx/ibus，GTK 加载不到输入法，
-          # 输入框就完全打不了字。优先改用宿主系统的 cache（里面注册了输入法的绝对路径）。
-          GTK_IM_MODULE_FILE=""
-          for host_cache in \
-            /usr/lib/*/gtk-3.0/3.0.0/immodules.cache \
-            /usr/lib/gtk-3.0/3.0.0/immodules.cache \
-            /usr/share/gtk-3.0/immodules.cache; do
-            if [ -f "$host_cache" ]; then
-              GTK_IM_MODULE_FILE="$host_cache"
+          # 宿主优先：用户系统里已有的库一律用用户的，捆绑的只作兜底。
+          # linuxdeploy 的 AppRun 会把捆绑库强行放在搜索路径最前，导致老版本
+          # 的 GTK/WebKit 覆盖宿主版本，输入法、渲染都会出问题。
+          HOST_LIBS="/usr/lib/x86_64-linux-gnu:/usr/lib64:/usr/lib:/usr/local/lib"
+          BUNDLED_LIBS="$HERE/usr/lib/x86_64-linux-gnu:$HERE/usr/lib64:$HERE/usr/lib:$HERE/lib"
+          export LD_LIBRARY_PATH="$HOST_LIBS${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}:$BUNDLED_LIBS"
+
+          # 复用 linuxdeploy 的 GTK/GStreamer hook（GDK_BACKEND、GTK_PATH 等），再把路径改成宿主优先。
+          if [ -f "$HERE/apprun-hooks/linuxdeploy-plugin-gtk.sh" ]; then
+            . "$HERE/apprun-hooks/linuxdeploy-plugin-gtk.sh"
+          fi
+          if [ -f "$HERE/apprun-hooks/linuxdeploy-plugin-gstreamer.sh" ]; then
+            . "$HERE/apprun-hooks/linuxdeploy-plugin-gstreamer.sh"
+          fi
+
+          export XDG_DATA_DIRS="/usr/local/share:/usr/share${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}:$HERE/usr/share"
+          export GSETTINGS_SCHEMA_DIR="/usr/share/glib-2.0/schemas${GSETTINGS_SCHEMA_DIR:+:$GSETTINGS_SCHEMA_DIR}:$HERE/usr/share/glib-2.0/schemas"
+          export GI_TYPELIB_PATH="/usr/lib/x86_64-linux-gnu/girepository-1.0${GI_TYPELIB_PATH:+:$GI_TYPELIB_PATH}:$HERE/usr/lib/girepository-1.0"
+          export GIO_EXTRA_MODULES="/usr/lib/x86_64-linux-gnu/gio/modules${GIO_EXTRA_MODULES:+:$GIO_EXTRA_MODULES}:$HERE/usr/lib/x86_64-linux-gnu/gio/modules"
+          export GST_PLUGIN_SYSTEM_PATH="/usr/lib/x86_64-linux-gnu/gstreamer${GST_PLUGIN_SYSTEM_PATH:+:$GST_PLUGIN_SYSTEM_PATH}:$HERE/usr/lib/gstreamer"
+          export GST_PLUGIN_SYSTEM_PATH_1_0="/usr/lib/x86_64-linux-gnu/gstreamer-1.0${GST_PLUGIN_SYSTEM_PATH_1_0:+:$GST_PLUGIN_SYSTEM_PATH_1_0}:$HERE/usr/lib/gstreamer-1.0"
+          export GST_PLUGIN_PATH_1_0="/usr/lib/x86_64-linux-gnu/gstreamer-1.0${GST_PLUGIN_PATH_1_0:+:$GST_PLUGIN_PATH_1_0}:$HERE/usr/lib/gstreamer-1.0"
+          export PATH="$HERE/usr/bin:$PATH"
+
+          # 输入法模块（immodules.cache）宿主优先：捆绑的 cache 里没有 fcitx/ibus，
+          # GTK 加载不到输入法模块时，网页输入框会打不了字。
+          IMMODULES=""
+          for cache in /usr/lib/*/gtk-3.0/3.0.0/immodules.cache /usr/lib/gtk-3.0/3.0.0/immodules.cache /usr/share/gtk-3.0/immodules.cache; do
+            if [ -f "$cache" ]; then IMMODULES="$cache"; break; fi
+          done
+          if [ -z "$IMMODULES" ] && [ -f "$HERE/usr/lib/gtk-3.0/3.0.0/immodules.cache" ]; then
+            IMMODULES="$HERE/usr/lib/gtk-3.0/3.0.0/immodules.cache"
+          fi
+          if [ -n "$IMMODULES" ]; then export GTK_IM_MODULE_FILE="$IMMODULES"; fi
+          if [ -z "${GTK_IM_MODULE:-}" ] && [ -n "$IMMODULES" ] && grep -q '^"fcitx"' "$IMMODULES"; then
+            export GTK_IM_MODULE=fcitx
+          fi
+
+          # 图片解码器（gdk-pixbuf loaders.cache）同样宿主优先。
+          LOADERS=""
+          for cache in /usr/lib/*/gdk-pixbuf-2.0/*/loaders.cache /usr/lib/gdk-pixbuf-2.0/*/loaders.cache; do
+            if [ -f "$cache" ]; then LOADERS="$cache"; break; fi
+          done
+          if [ -z "$LOADERS" ] && [ -f "$HERE/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache" ]; then
+            LOADERS="$HERE/usr/lib/gdk-pixbuf-2.0/2.10.0/loaders.cache"
+          fi
+          if [ -n "$LOADERS" ]; then export GDK_PIXBUF_MODULE_FILE="$LOADERS"; fi
+
+          # 主程序：优先按 .desktop 的 Exec 定位，避免误取 usr/bin 里的 xdg-open。
+          BIN=""
+          for desktop in "$HERE"/*.desktop; do
+            [ -f "$desktop" ] || continue
+            exec_line="$(sed -n 's/^Exec=//p' "$desktop" | head -1)"
+            [ -n "$exec_line" ] || continue
+            first_word="${exec_line%% *}"
+            first_word="${first_word##*/}"
+            if [ -x "$HERE/usr/bin/$first_word" ]; then
+              BIN="$HERE/usr/bin/$first_word"
               break
             fi
           done
-          if [ -z "$GTK_IM_MODULE_FILE" ] && [ -f "$HERE/usr/lib/gtk-3.0/3.0.0/immodules.cache" ]; then
-            GTK_IM_MODULE_FILE="$HERE/usr/lib/gtk-3.0/3.0.0/immodules.cache"
-          fi
-          if [ -n "$GTK_IM_MODULE_FILE" ]; then
-            export GTK_IM_MODULE_FILE
-          fi
-          # 宿主装了 fcitx5 却没设 GTK_IM_MODULE 时补上，保证输入法可用。
-          if [ -z "${GTK_IM_MODULE:-}" ] && [ -n "$GTK_IM_MODULE_FILE" ] && grep -q '^"fcitx"' "$GTK_IM_MODULE_FILE"; then
-            export GTK_IM_MODULE=fcitx
+          if [ -z "$BIN" ]; then
+            for candidate in "$HERE"/usr/bin/*; do
+              if [ -x "$candidate" ] && [ -f "$candidate" ]; then BIN="$candidate"; break; fi
+            done
           fi
 
           MISSING=""
           if [ -n "$BIN" ]; then
-            MISSING="$(LD_LIBRARY_PATH="$HERE/usr/lib:$HERE/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ldd "$BIN" 2>/dev/null | grep 'not found' || true)"
+            MISSING="$(ldd "$BIN" 2>/dev/null | grep 'not found' || true)"
           fi
 
           if [ -n "$MISSING" ]; then
@@ -479,7 +521,8 @@ jobs:
             exit 1
           fi
 
-          exec "$HERE/AppRun.real" "$@"
+          cd "$HERE"
+          exec "$BIN" "$@"
           EOF
           chmod +x "$APPDIR/AppRun"
 
